@@ -2,16 +2,21 @@ package builder
 
 import (
 	"archive/tar"
+	"strings"
 	//"bufio"
 	"bytes"
 	"context"
 	"fmt"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	//"io"
+	"io"
+	"io/ioutil"
 	"log"
+	"os"
 	"os/exec"
 )
 
@@ -62,6 +67,8 @@ func (b *builder) buildBuilderImage() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	io.Copy(os.Stdout, response.Body)
 	response.Body.Close()
 	fmt.Println("Image built")
 }
@@ -83,13 +90,33 @@ func runCmd(command string, args ...string) {
 		log.Fatal(err, command, args)
 	}
 }
+
 func (b *builder) setupProvisionedContainer(builderContainerId, productContainerId string) {
-	runCmd("/usr/bin/docker", "exec", builderContainerId, "mkdir", "-p", "/root/.ssh")
-	runCmd("/usr/bin/docker", "exec", productContainerId, "mkdir", "-p", "/root/.ssh")
-	runCmd("/usr/bin/docker", "exec", builderContainerId, "ssh-keygen", "-t", "rsa", "-N", "", "-q", "-f", "/root/.ssh/id_rsa")
-	runCmd("/usr/bin/docker", "exec", builderContainerId, "bash", "-c", "chmod 0400 /root/.ssh/id_rsa*")
-	runCmd("/usr/bin/docker", "cp", builderContainerId+":/root/.ssh/id_rsa.pub", "/tmp/authorized_keys")
-	runCmd("/usr/bin/docker", "cp", "/tmp/authorized_keys", productContainerId+":/root/.ssh/authorized_keys")
+	b.runInContainer(builderContainerId, "mkdir", "-p", "/root/.ssh")
+	b.runInContainer(builderContainerId, "ssh-keygen", "-t", "rsa", "-N", "", "-q", "-f", "/root/.ssh/id_rsa")
+	b.runInContainer(builderContainerId, "bash", "-c", "chmod 0400 /root/.ssh/id_rsa*")
+	b.runInContainer(productContainerId, "mkdir", "-p", "/root/.ssh")
+	key := b.runInContainerWithOutput(builderContainerId, "bash", "-c", "cat /root/.ssh/id_rsa.pub")
+	fmt.Println(key)
+	b.runInContainer(productContainerId, "bash", "-c", "echo '"+key+"' >> /root/.ssh/authorized_keys")
+	// b.runInContainer(productContainerId, "bash", "-c", "echo 'root' | passwd root --stdin")
+	// runCmd("docker", "exec", builderContainerId, "mkdir", "-p", "/root/.ssh")
+	// runCmd("docker", "exec", productContainerId, "mkdir", "-p", "/root/.ssh")
+	// runCmd("/usr/bin/docker", "exec", builderContainerId, "ssh-keygen", "-t", "rsa", "-N", "", "-q", "-f", "/root/.ssh/id_rsa")
+	// runCmd("/usr/bin/docker", "exec", builderContainerId, "bash", "-c", "chmod 0400 /root/.ssh/id_rsa*")
+	// fmt.Println("Copying SSH key from builder container")
+	// reader, _, err := b.cli.CopyFromContainer(b.ctx, builderContainerId, "/root/.ssh/id_rsa.pub")
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// defer reader.Close()
+	// fmt.Println("Setting SSH key as authorized")
+	// err = b.cli.CopyToContainer(b.ctx, productContainerId, "/root/.ssh/authorized_keys", reader, types.CopyToContainerOptions{})
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// runCmd("/usr/bin/docker", "cp", builderContainerId+":/root/.ssh/id_rsa.pub", "/tmp/authorized_keys")
+	// runCmd("/usr/bin/docker", "cp", "/tmp/authorized_keys", productContainerId+":/root/.ssh/authorized_keys")
 	response, err := b.cli.ContainerInspect(b.ctx, productContainerId)
 	if err != nil {
 		log.Fatal(err)
@@ -103,6 +130,41 @@ func (b *builder) setupProvisionedContainer(builderContainerId, productContainer
 		"-vv",
 		"--ssh-extra-args", "-o StrictHostKeyChecking=no",
 	)
+}
+
+func (b *builder) runInContainer(containerId string, cmd ...string) {
+	fmt.Printf("Running in %s: %s\n", containerId, strings.Join(cmd, " "))
+	response, err := b.cli.ContainerExecCreate(b.ctx, containerId, types.ExecConfig{
+		Cmd: cmd,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = b.cli.ContainerExecStart(b.ctx, response.ID, types.ExecStartCheck{})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (b *builder) runInContainerWithOutput(containerId string, cmd ...string) string {
+	response, err := b.cli.ContainerExecCreate(b.ctx, containerId, types.ExecConfig{
+		AttachStdout: true,
+		Cmd:          cmd,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	hijacked, err := b.cli.ContainerExecAttach(b.ctx, response.ID, types.ExecConfig{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer hijacked.Close()
+	io.Copy(os.Stdout, hijacked.Reader)
+	output, err := ioutil.ReadAll(hijacked.Reader)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func (b *builder) runBuilderContainer() string {
