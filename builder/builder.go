@@ -85,7 +85,10 @@ func (b *builder) createBuildContext() *bytes.Buffer {
 }
 
 func runCmd(command string, args ...string) {
-	err := exec.Command(command, args...).Run()
+	cmd := exec.Command(command, args...)
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = os.Stdout
+	err := cmd.Run()
 	if err != nil {
 		log.Fatal(err, command, args)
 	}
@@ -93,28 +96,33 @@ func runCmd(command string, args ...string) {
 
 func (b *builder) setupProvisionedContainer(builderContainerId, productContainerId string) {
 	b.runInContainer(builderContainerId, "mkdir", "-p", "/root/.ssh")
-	b.runInContainer(builderContainerId, "ssh-keygen", "-t", "rsa", "-N", "", "-q", "-f", "/root/.ssh/id_rsa")
-	b.runInContainer(builderContainerId, "bash", "-c", "chmod 0400 /root/.ssh/id_rsa*")
-	b.runInContainer(productContainerId, "mkdir", "-p", "/root/.ssh")
-	key := b.runInContainerWithOutput(builderContainerId, "bash", "-c", "cat /root/.ssh/id_rsa.pub")
-	fmt.Println(key)
-	b.runInContainer(productContainerId, "bash", "-c", "echo '"+key+"' >> /root/.ssh/authorized_keys")
+	b.runInContainer(builderContainerId, "ssh-keygen", "-t", "rsa", "-N", "", "-q", "-f", "/tmp/id_rsa")
+	b.runInContainer(builderContainerId, "bash", "-c", "chmod 0400 /tmp/id_rsa*")
+	b.runInContainer(builderContainerId, "ls -la /tmp")
+	b.runInContainer(builderContainerId, "sync /tmp/id_rsa.pub")
+	//key := b.runInContainerWithOutput(builderContainerId, "bash", "-c", "cat /root/.ssh/id_rsa.pub")
+	//fmt.Println(key)
+	//b.runInContainer(productContainerId, "bash", "-c", "echo '"+key+"' >> /root/.ssh/authorized_keys")
 	// b.runInContainer(productContainerId, "bash", "-c", "echo 'root' | passwd root --stdin")
 	// runCmd("docker", "exec", builderContainerId, "mkdir", "-p", "/root/.ssh")
 	// runCmd("docker", "exec", productContainerId, "mkdir", "-p", "/root/.ssh")
 	// runCmd("/usr/bin/docker", "exec", builderContainerId, "ssh-keygen", "-t", "rsa", "-N", "", "-q", "-f", "/root/.ssh/id_rsa")
 	// runCmd("/usr/bin/docker", "exec", builderContainerId, "bash", "-c", "chmod 0400 /root/.ssh/id_rsa*")
 	// fmt.Println("Copying SSH key from builder container")
-	// reader, _, err := b.cli.CopyFromContainer(b.ctx, builderContainerId, "/root/.ssh/id_rsa.pub")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer reader.Close()
-	// fmt.Println("Setting SSH key as authorized")
-	// err = b.cli.CopyToContainer(b.ctx, productContainerId, "/root/.ssh/authorized_keys", reader, types.CopyToContainerOptions{})
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	//b.runInContainer(builderContainerId, "sync")
+	//runCmd("sync")
+	reader, _, err := b.cli.CopyFromContainer(b.ctx, builderContainerId, "/tmp/id_rsa.pub")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer reader.Close()
+	fmt.Println("Setting SSH key as authorized")
+	err = b.cli.CopyToContainer(b.ctx, productContainerId, "/tmp", reader, types.CopyToContainerOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	b.runInContainer(productContainerId, "mkdir", "-p", "/root/.ssh")
+	b.runInContainer(productContainerId, "bash", "-c", "cat /tmp/id_rsa.pub >> /root/.ssh/authorized_keys")
 	// runCmd("/usr/bin/docker", "cp", builderContainerId+":/root/.ssh/id_rsa.pub", "/tmp/authorized_keys")
 	// runCmd("/usr/bin/docker", "cp", "/tmp/authorized_keys", productContainerId+":/root/.ssh/authorized_keys")
 	response, err := b.cli.ContainerInspect(b.ctx, productContainerId)
@@ -128,22 +136,30 @@ func (b *builder) setupProvisionedContainer(builderContainerId, productContainer
 		"-i", containerAddress+",",
 		"-l", containerAddress,
 		"-vv",
-		"--ssh-extra-args", "-o StrictHostKeyChecking=no",
+		"--ssh-extra-args", "-o StrictHostKeyChecking=no -o IdentityFile=/tmp/id_rsa",
 	)
 }
 
 func (b *builder) runInContainer(containerId string, cmd ...string) {
 	fmt.Printf("Running in %s: %s\n", containerId, strings.Join(cmd, " "))
 	response, err := b.cli.ContainerExecCreate(b.ctx, containerId, types.ExecConfig{
-		Cmd: cmd,
+		Cmd:    cmd,
+		Detach: false,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = b.cli.ContainerExecStart(b.ctx, response.ID, types.ExecStartCheck{})
+
+	err = b.cli.ContainerExecStart(b.ctx, response.ID, types.ExecStartCheck{Detach: false})
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	inspect, err := b.cli.ContainerExecInspect(b.ctx, response.ID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
 }
 
 func (b *builder) runInContainerWithOutput(containerId string, cmd ...string) string {
@@ -159,6 +175,10 @@ func (b *builder) runInContainerWithOutput(containerId string, cmd ...string) st
 		log.Fatal(err)
 	}
 	defer hijacked.Close()
+	read := make([]byte, 1024)
+	n, err := hijacked.Reader.Read(read)
+	fmt.Println(n)
+	fmt.Println(read)
 	io.Copy(os.Stdout, hijacked.Reader)
 	output, err := ioutil.ReadAll(hijacked.Reader)
 	if err != nil {
