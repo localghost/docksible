@@ -16,5 +16,5 @@ deploy:
   skip_cleanup: true
   on:
     repo: localghost/docksible
-    go: 1.8.0
+    go: 1.8
     tags: true
