@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/docker"
+	"github.com/localghost/docksible/utils"
 	//"io"
 
 	"log"
@@ -103,21 +104,23 @@ func runCmd(command string, args ...string) {
 }
 
 func (b *builder) setupProvisionedContainer() {
-	b.container.ExecAndWait("ssh-keygen", "-t", "rsa", "-N", "", "-q", "-f", "/tmp/id_rsa")
-	b.container.ExecAndWait("bash", "-c", "chmod 0400 /tmp/id_rsa*")
-	b.container.ExecAndWait("bash", "-c", "ls --color=never /opt")
-	reader, _, err := b.cli.CopyFromContainer(b.ctx, b.container.Id, "/tmp/id_rsa.pub")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer reader.Close()
-	fmt.Println("Setting SSH key as authorized")
-	err = b.cli.CopyToContainer(b.ctx, b.result.Id, "/tmp", reader, types.CopyToContainerOptions{})
+	sshKeys := utils.NewSSHKeyGenerator().GenerateInMemory()
+
+	bc := docker.NewInMemoryBuildContext()
+	bc.Add("id_rsa", string(sshKeys.PrivateKey.Bytes()))
+	privateKey := bc.Close()
+	b.cli.CopyToContainer(b.ctx, b.container.Id, "/tmp", privateKey, types.CopyToContainerOptions{})
+
+	bc = docker.NewInMemoryBuildContext()
+	bc.Add("id_rsa.pub", string(sshKeys.PublicKey.Bytes()))
+	publicKey := bc.Close()
+	err := b.cli.CopyToContainer(b.ctx, b.result.Id, "/tmp", publicKey, types.CopyToContainerOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}
 	b.result.ExecAndWait("mkdir", "-p", "/root/.ssh")
 	b.result.ExecAndWait("bash", "-c", "cat /tmp/id_rsa.pub >> /root/.ssh/authorized_keys")
+
 	response, err := b.cli.ContainerInspect(b.ctx, b.result.Id)
 	if err != nil {
 		log.Fatal(err)
