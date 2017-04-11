@@ -11,6 +11,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 )
 
 type Container struct {
@@ -38,7 +39,6 @@ func (c *Container) ExecAndWait(command ...string) error {
 		Cmd:          command,
 		Detach:       false,
 		AttachStderr: true,
-		Tty:          true,
 	})
 	if err != nil {
 		log.Fatalln(err)
@@ -65,7 +65,7 @@ func (c *Container) ExecAndOutput(command ...string) error {
 		Cmd:          command,
 		Detach:       false,
 		AttachStderr: true,
-		// Tty:          true,
+		Tty:          false, // enable to turn on coloring
 	})
 	if err != nil {
 		log.Fatalln(err)
@@ -75,7 +75,7 @@ func (c *Container) ExecAndOutput(command ...string) error {
 		log.Fatalln(err)
 	}
 	defer hijacked.Close()
-	io.Copy(os.Stdout, hijacked.Reader)
+	stdcopy.StdCopy(os.Stdout, os.Stderr, hijacked.Reader)
 
 	inspect, err := c.cli.ContainerExecInspect(c.ctx, response.ID)
 	if err != nil {
