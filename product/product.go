@@ -11,6 +11,7 @@ import (
 	//"io"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
+	"github.com/localghost/docksible/docker"
 	"io"
 	"io/ioutil"
 	"log"
@@ -41,16 +42,9 @@ func New() *product {
 	}
 }
 
-func (p *product) Run() string {
+func (p *product) Run() *docker.Container {
 	p.buildProductImage()
-	containerId := p.runProductContainer()
-	p.provisionContainer(containerId)
-	fmt.Println(containerId)
-	return containerId
-	//err := p.cli.ContainerStop(p.ctx, containerId, nil)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
+	return p.runProductContainer()
 }
 
 func (p *product) buildProductImage() {
@@ -79,7 +73,7 @@ func (p *product) createBuildContext() *bytes.Buffer {
 	return buf
 }
 
-func (p *product) runProductContainer() string {
+func (p *product) runProductContainer() *docker.Container {
 	config := &container.Config{
 		Cmd:   []string{"/usr/sbin/sshd", "-D"},
 		Image: "docksible-product",
@@ -94,17 +88,5 @@ func (p *product) runProductContainer() string {
 		},
 		AutoRemove: true,
 	}
-	response, err := p.cli.ContainerCreate(p.ctx, config, hostConfig, nil, "")
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = p.cli.ContainerStart(p.ctx, response.ID, types.ContainerStartOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	return response.ID
-}
-
-func (p *product) provisionContainer(containerId string) {
-
+	return docker.NewContainer("", config, hostConfig, nil, nil)
 }

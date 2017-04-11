@@ -18,7 +18,6 @@ import (
 
 	"log"
 	"os"
-	"os/exec"
 )
 
 const dockerfile string = `
@@ -56,8 +55,7 @@ func (b *builder) Bootstrap() {
 }
 
 func (b *builder) ProvisionContainer(container *docker.Container) {
-	builderContainerId := b.runBuilderContainer()
-	b.container = docker.NewContainer(builderContainerId, nil)
+	b.container = b.runBuilderContainer()
 	b.result = container
 	b.setupProvisionedContainer()
 }
@@ -88,31 +86,21 @@ func (b *builder) buildBuilderImage() {
 }
 
 func (b *builder) createBuildContext() *bytes.Buffer {
-	buildContext := docker.NewInMemoryBuildContext()
+	buildContext := utils.NewInMemoryArchive()
 	buildContext.Add("Dockerfile", dockerfile)
 	return buildContext.Close()
-}
-
-func runCmd(command string, args ...string) {
-	cmd := exec.Command(command, args...)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	err := cmd.Run()
-	if err != nil {
-		log.Fatal(err, command, args)
-	}
 }
 
 func (b *builder) setupProvisionedContainer() {
 	sshKeys := utils.NewSSHKeyGenerator().GenerateInMemory()
 
-	bc := docker.NewInMemoryBuildContext()
-	bc.Add("id_rsa", string(sshKeys.PrivateKey.Bytes()))
+	bc := utils.NewInMemoryArchive()
+	bc.AddBytes("id_rsa", sshKeys.PrivateKey.Bytes())
 	privateKey := bc.Close()
 	b.cli.CopyToContainer(b.ctx, b.container.Id, "/tmp", privateKey, types.CopyToContainerOptions{})
 
-	bc = docker.NewInMemoryBuildContext()
-	bc.Add("id_rsa.pub", string(sshKeys.PublicKey.Bytes()))
+	bc = utils.NewInMemoryArchive()
+	bc.AddBytes("id_rsa.pub", sshKeys.PublicKey.Bytes())
 	publicKey := bc.Close()
 	err := b.cli.CopyToContainer(b.ctx, b.result.Id, "/tmp", publicKey, types.CopyToContainerOptions{})
 	if err != nil {
@@ -126,17 +114,18 @@ func (b *builder) setupProvisionedContainer() {
 		log.Fatal(err)
 	}
 	containerAddress := response.NetworkSettings.IPAddress
-	b.container.ExecAndOutput(
+	cmd := []string{
 		"/usr/bin/ansible-playbook",
 		"/opt/ansible/playbook.yml",
-		"-i", containerAddress+",",
+		"-i", containerAddress + ",",
 		"-l", containerAddress,
 		"-vv",
 		"--ssh-extra-args", "-o StrictHostKeyChecking=no -o IdentityFile=/tmp/id_rsa",
-	)
+	}
+	b.container.ExecAndOutput(os.Stdout, os.Stderr, cmd...)
 }
 
-func (b *builder) runBuilderContainer() string {
+func (b *builder) runBuilderContainer() *docker.Container {
 	config := &container.Config{
 		Cmd: []string{
 			"bash", "-c", "tail -f /dev/null",
@@ -153,13 +142,5 @@ func (b *builder) runBuilderContainer() string {
 		},
 		AutoRemove: true,
 	}
-	response, err := b.cli.ContainerCreate(b.ctx, config, hostConfig, nil, "")
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = b.cli.ContainerStart(b.ctx, response.ID, types.ContainerStartOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	return response.ID
+	return docker.NewContainer("", config, hostConfig, nil, nil)
 }
