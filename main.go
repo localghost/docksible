@@ -4,8 +4,8 @@ import (
 	"github.com/localghost/docksible/cmd"
 	//"github.com/localghost/docksible/builder"
 	//"github.com/localghost/docksible/product"
-	"os"
 	"fmt"
+	"os"
 )
 
 func main() {

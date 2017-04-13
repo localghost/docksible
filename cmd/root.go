@@ -1,18 +1,19 @@
 package cmd
 
 import (
-	"github.com/spf13/cobra"
 	"fmt"
+	"github.com/localghost/docksible/builder"
 	"github.com/localghost/docksible/product"
+	"github.com/spf13/cobra"
 )
 
 type rootFlags struct {
-	ansibleDir string
-	playbookPath string
+	ansibleDir      string
+	playbookPath    string
 	inventoryGroups []string
-	extraArgs []string
-	baseImage string
-	builderImage string
+	extraArgs       []string
+	baseImage       string
+	builderImage    string
 }
 
 func printUsageError(cmd *cobra.Command, message string) {
@@ -23,7 +24,7 @@ func CreateRootCommand() *cobra.Command {
 	flags := rootFlags{}
 	cmd := &cobra.Command{
 		Use: "docksible [flags] image playbook",
-		Run: func (cmd *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) != 2 {
 				printUsageError(cmd, "Please provide path to playbook to execute and image to provision.")
 			}
@@ -39,7 +40,6 @@ func CreateRootCommand() *cobra.Command {
 }
 
 func run(image, playbook string, flags *rootFlags) {
-	builder := builder.New()
-	builder.Bootstrap()
-	builder.ProvisionContainer(product.New().Run())
+	b := builder.New(image)
+	b.ProvisionContainer(product.New().Run(), &builder.ProvisionOptions{AnsibleDir: flags.ansibleDir, PlaybookPath: playbook, InventoryGroups: flags.inventoryGroups})
 }

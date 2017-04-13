@@ -1,12 +1,12 @@
 package builder
 
 import (
-	"encoding/json"
-	"io"
+	//"encoding/json"
+	//"io"
 	//"bufio"
-	"bytes"
+	//"bytes"
 	"context"
-	"fmt"
+	//"fmt"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -18,18 +18,11 @@ import (
 
 	"log"
 	"os"
+	"path/filepath"
 )
 
-const dockerfile string = `
-FROM centos:7
-
-RUN yum install -y epel-release
-RUN yum install -y ansible
-RUN yum install -y openssh-clients
-`
-
 type builder struct {
-	builderImage string
+	image string
 
 	cli       *client.Client
 	ctx       context.Context
@@ -37,61 +30,81 @@ type builder struct {
 	result    *docker.Container
 }
 
-func New() *builder {
+type ProvisionOptions struct {
+	PlaybookPath    string
+	AnsibleDir      string
+	InventoryGroups []string
+}
+
+func New(image string) *builder {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &builder{
-		builderImage: "centos:7",
-		cli:          cli,
-		ctx:          context.Background(),
-	}
+	return &builder{image: image, cli: cli, ctx: context.Background()}
 }
 
-func (b *builder) Bootstrap() {
-	b.buildBuilderImage()
-}
+//func (b *builder) Bootstrap() {
+//	b.buildBuilderImage()
+//}
 
-func (b *builder) ProvisionContainer(container *docker.Container) {
-	b.container = b.runBuilderContainer()
-	b.result = container
-	b.setupProvisionedContainer()
-}
-
-func (b *builder) buildBuilderImage() {
-	fmt.Println("Building builder image")
-	buildContext := b.createBuildContext()
-	buildOptions := types.ImageBuildOptions{
-		Tags: []string{"docksible-builder"},
+func (b *builder) ProvisionContainer(container *docker.Container, options *ProvisionOptions) {
+	mounts := []mount.Mount{}
+	if options.AnsibleDir != "" {
+		mounts = append(
+			mounts,
+			mount.Mount{Type: "bind", Source: options.AnsibleDir, Target: options.AnsibleDir},
+		)
 	}
-	response, err := b.cli.ImageBuild(b.ctx, buildContext, buildOptions)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer response.Body.Close()
-
-	type Line struct{ Stream string }
-
-	decoder := json.NewDecoder(response.Body)
-	for err == nil {
-		var line Line
-		if err = decoder.Decode(&line); err != nil {
-			break
+	if !filepath.IsAbs(options.PlaybookPath) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			log.Fatal(err)
 		}
-		fmt.Print(line.Stream)
+		options.PlaybookPath = filepath.Join(cwd, options.PlaybookPath)
 	}
-	io.Copy(os.Stdout, response.Body)
+	mounts = append(
+		mounts,
+		mount.Mount{Type: "bind", Source: options.PlaybookPath, Target: options.PlaybookPath},
+	)
+	b.container = b.runBuilderContainer(mounts)
+	b.result = container
+	b.setupProvisionedContainer(options.PlaybookPath)
 }
 
-func (b *builder) createBuildContext() *bytes.Buffer {
-	buildContext := utils.NewInMemoryArchive()
-	buildContext.Add("Dockerfile", dockerfile)
-	return buildContext.Close()
-}
+//func (b *builder) buildBuilderImage() {
+//	fmt.Println("Building builder image")
+//	buildContext := b.createBuildContext()
+//	buildOptions := types.ImageBuildOptions{
+//		Tags: []string{"docksible-builder"},
+//	}
+//	response, err := b.cli.ImageBuild(b.ctx, buildContext, buildOptions)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//	defer response.Body.Close()
+//
+//	type Line struct{ Stream string }
+//
+//	decoder := json.NewDecoder(response.Body)
+//	for err == nil {
+//		var line Line
+//		if err = decoder.Decode(&line); err != nil {
+//			break
+//		}
+//		fmt.Print(line.Stream)
+//	}
+//	io.Copy(os.Stdout, response.Body)
+//}
 
-func (b *builder) setupProvisionedContainer() {
+//func (b *builder) createBuildContext() *bytes.Buffer {
+//	buildContext := utils.NewInMemoryArchive()
+//	buildContext.Add("Dockerfile", dockerfile)
+//	return buildContext.Close()
+//}
+
+func (b *builder) setupProvisionedContainer(playbookPath string) {
 	sshKeys := utils.NewSSHKeyGenerator().GenerateInMemory()
 
 	bc := utils.NewInMemoryArchive()
@@ -116,7 +129,7 @@ func (b *builder) setupProvisionedContainer() {
 	containerAddress := response.NetworkSettings.IPAddress
 	cmd := []string{
 		"/usr/bin/ansible-playbook",
-		"/opt/ansible/playbook.yml",
+		playbookPath,
 		"-i", containerAddress + ",",
 		"-l", containerAddress,
 		"-vv",
@@ -125,22 +138,13 @@ func (b *builder) setupProvisionedContainer() {
 	b.container.ExecAndOutput(os.Stdout, os.Stderr, cmd...)
 }
 
-func (b *builder) runBuilderContainer() *docker.Container {
+func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
 	config := &container.Config{
 		Cmd: []string{
 			"bash", "-c", "tail -f /dev/null",
 		},
-		Image: "docksible-builder",
+		Image: b.image,
 	}
-	hostConfig := &container.HostConfig{
-		Mounts: []mount.Mount{
-			{
-				Type:   "bind",
-				Source: "/tmp/ansible",
-				Target: "/opt/ansible",
-			},
-		},
-		AutoRemove: true,
-	}
+	hostConfig := &container.HostConfig{Mounts: mounts, AutoRemove: true}
 	return docker.NewContainer("", config, hostConfig, nil, nil)
 }
