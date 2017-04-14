@@ -12,22 +12,21 @@ type rootFlags struct {
 	playbookPath    string
 	inventoryGroups []string
 	extraArgs       []string
-	baseImage       string
 	builderImage    string
-}
-
-func printUsageError(cmd *cobra.Command, message string) {
-	fmt.Printf("%s\n\n%s", message, cmd.UsageString())
+	resultImage     string
 }
 
 func CreateRootCommand() *cobra.Command {
 	flags := rootFlags{}
 	cmd := &cobra.Command{
 		Use: "docksible [flags] image playbook",
-		Run: func(cmd *cobra.Command, args []string) {
+		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
-				printUsageError(cmd, "Please provide path to playbook to execute and image to provision.")
+				return fmt.Errorf("Please provide path to playbook to execute and image to provision.")
 			}
+			return nil
+		},
+		Run: func(cmd *cobra.Command, args []string) {
 			run(args[0], args[1], &flags)
 		},
 	}
@@ -35,11 +34,17 @@ func CreateRootCommand() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&flags.inventoryGroups, "inventory-groups", "g", []string{}, "Ansible groups the provisioned container should belong to.")
 	cmd.Flags().StringSliceVarP(&flags.extraArgs, "extra-args", "x", []string{}, "Extra arguments passed to ansible.")
 	cmd.Flags().StringVarP(&flags.builderImage, "builder-image", "b", "docksible/builder", "Docker image for the builder container. It needs to have ansible and ssh client built in.")
+	cmd.Flags().StringVarP(&flags.resultImage, "result-image", "r", "", "Name of the resulting docker image.")
 
 	return cmd
 }
 
 func run(image, playbook string, flags *rootFlags) {
-	b := builder.New(image)
-	b.ProvisionContainer(product.New().Run(), &builder.ProvisionOptions{AnsibleDir: flags.ansibleDir, PlaybookPath: playbook, InventoryGroups: flags.inventoryGroups})
+	provisionOptions := &builder.ProvisionOptions{
+		AnsibleDir:      flags.ansibleDir,
+		PlaybookPath:    playbook,
+		InventoryGroups: flags.inventoryGroups,
+	}
+	b := builder.New(flags.builderImage)
+	b.ProvisionContainer(product.New(image).Run(), provisionOptions)
 }

@@ -1,45 +1,31 @@
 package product
 
 import (
-	"archive/tar"
-	//"bufio"
-	"bytes"
 	"context"
-	"fmt"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/client"
-	//"io"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/docker"
 	"io"
 	"io/ioutil"
 	"log"
 )
 
-const dockerfile string = `
-FROM centos:7
-
-RUN yum install -y openssh-server
-RUN /usr/sbin/sshd-keygen
-
-`
-
 type product struct {
+	baseImage string
+
 	cli *client.Client
 	ctx context.Context
 }
 
-func New() *product {
+func New(baseImage string) *product {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &product{
-		cli: cli,
-		ctx: context.Background(),
-	}
+	return &product{baseImage: baseImage, cli: cli, ctx: context.Background()}
 }
 
 func (p *product) Run() *docker.Container {
@@ -48,45 +34,29 @@ func (p *product) Run() *docker.Container {
 }
 
 func (p *product) buildProductImage() {
-	fmt.Println("Building product image")
-	buildContext := p.createBuildContext()
-	buildOptions := types.ImageBuildOptions{
-		Tags: []string{"docksible-product"},
-	}
-	response, err := p.cli.ImageBuild(p.ctx, buildContext, buildOptions)
+	filter := filters.NewArgs()
+	filter.Add("reference", p.baseImage)
+
+	results, err := p.cli.ImageList(p.ctx, types.ImageListOptions{Filters: filter})
 	if err != nil {
 		log.Fatal(err)
 	}
-	io.Copy(ioutil.Discard, response.Body)
-	response.Body.Close()
-	fmt.Println("Image built")
-}
 
-func (p *product) createBuildContext() *bytes.Buffer {
-	buf := new(bytes.Buffer)
-
-	writer := tar.NewWriter(buf)
-	writer.WriteHeader(&tar.Header{Name: "Dockerfile", Size: int64(len(dockerfile))})
-	writer.Write([]byte(dockerfile))
-	writer.Close()
-
-	return buf
+	if len(results) == 0 {
+		response, err := p.cli.ImagePull(p.ctx, p.baseImage, types.ImagePullOptions{})
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer response.Close()
+		io.Copy(ioutil.Discard, response)
+	}
 }
 
 func (p *product) runProductContainer() *docker.Container {
 	config := &container.Config{
 		Cmd:   []string{"/usr/sbin/sshd", "-D"},
-		Image: "docksible-product",
+		Image: p.baseImage,
 	}
-	hostConfig := &container.HostConfig{
-		Mounts: []mount.Mount{
-			{
-				Type:   "bind",
-				Source: "/tmp/ansible",
-				Target: "/opt/ansible",
-			},
-		},
-		AutoRemove: true,
-	}
+	hostConfig := &container.HostConfig{AutoRemove: true}
 	return docker.NewContainer("", config, hostConfig, nil, nil)
 }
