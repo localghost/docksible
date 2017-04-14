@@ -69,6 +69,7 @@ func (b *builder) ProvisionContainer(container *docker.Container, options *Provi
 		mount.Mount{Type: "bind", Source: options.PlaybookPath, Target: options.PlaybookPath},
 	)
 	b.container = b.runBuilderContainer(mounts)
+	defer b.container.Remove()
 	b.result = container
 	b.setupProvisionedContainer(options.PlaybookPath)
 }
@@ -145,6 +146,6 @@ func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
 		},
 		Image: b.image,
 	}
-	hostConfig := &container.HostConfig{Mounts: mounts, AutoRemove: true}
+	hostConfig := &container.HostConfig{Mounts: mounts}
 	return docker.NewContainer("", config, hostConfig, nil, nil)
 }

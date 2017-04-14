@@ -8,6 +8,7 @@ import (
 
 	"io/ioutil"
 
+	"fmt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/network"
@@ -100,4 +101,22 @@ func (c *Container) ExecAndOutput(stdout, stderr io.Writer, command ...string) (
 	}
 	log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
 	return inspect.ExitCode, nil
+}
+
+func (c *Container) Commit(image string, command string) string {
+	changes := []string{fmt.Sprintf("CMD %s", command)}
+	response, err := c.cli.ContainerCommit(c.ctx, c.Id, types.ContainerCommitOptions{Reference: image, Changes: changes})
+	if err != nil {
+		log.Fatal(err)
+	}
+	return response.ID
+}
+
+func (c *Container) Remove() {
+	if err := c.cli.ContainerStop(c.ctx, c.Id, nil); err != nil {
+		log.Println(err)
+	}
+	if err := c.cli.ContainerRemove(c.ctx, c.Id, types.ContainerRemoveOptions{RemoveVolumes: true}); err != nil {
+		log.Fatal(err)
+	}
 }

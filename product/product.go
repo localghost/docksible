@@ -57,6 +57,5 @@ func (p *product) runProductContainer() *docker.Container {
 		Cmd:   []string{"/usr/sbin/sshd", "-D"},
 		Image: p.baseImage,
 	}
-	hostConfig := &container.HostConfig{AutoRemove: true}
-	return docker.NewContainer("", config, hostConfig, nil, nil)
+	return docker.NewContainer("", config, nil, nil, nil)
 }

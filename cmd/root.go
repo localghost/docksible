@@ -46,5 +46,10 @@ func run(image, playbook string, flags *rootFlags) {
 		InventoryGroups: flags.inventoryGroups,
 	}
 	b := builder.New(flags.builderImage)
-	b.ProvisionContainer(product.New(image).Run(), provisionOptions)
+	provisioned := product.New(image).Run()
+	defer provisioned.Remove()
+	b.ProvisionContainer(provisioned, provisionOptions)
+
+	imageId := provisioned.Commit(flags.resultImage, "bash")
+	fmt.Printf("Image %s built successfully.", imageId)
 }
