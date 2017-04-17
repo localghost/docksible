@@ -86,18 +86,18 @@ func (c *Container) ExecAndOutput(stdout, stderr io.Writer, command ...string) (
 		Tty:          false, // enable to turn on coloring
 	})
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 	hijacked, err := c.cli.ContainerExecAttach(c.ctx, response.ID, types.ExecConfig{})
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 	defer hijacked.Close()
 	stdcopy.StdCopy(stdout, stderr, hijacked.Reader)
 
 	inspect, err := c.cli.ContainerExecInspect(c.ctx, response.ID)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatal(err)
 	}
 	log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
 	return inspect.ExitCode, nil

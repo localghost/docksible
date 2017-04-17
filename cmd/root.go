@@ -51,5 +51,5 @@ func run(image, playbook string, flags *rootFlags) {
 	b.ProvisionContainer(provisioned, provisionOptions)
 
 	imageId := provisioned.Commit(flags.resultImage, "bash")
-	fmt.Printf("Image %s built successfully.", imageId)
+	fmt.Printf("Image %s built successfully.\n", imageId)
 }

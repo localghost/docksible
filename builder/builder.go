@@ -16,6 +16,8 @@ import (
 	"github.com/localghost/docksible/utils"
 	//"io"
 
+	"fmt"
+	"github.com/localghost/docksible/connector"
 	"log"
 	"os"
 	"path/filepath"
@@ -68,6 +70,11 @@ func (b *builder) ProvisionContainer(container *docker.Container, options *Provi
 		mounts,
 		mount.Mount{Type: "bind", Source: options.PlaybookPath, Target: options.PlaybookPath},
 	)
+	// Following mount is only needed for docker provisioning
+	mounts = append(
+		mounts,
+		mount.Mount{Type: "bind", Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
+	)
 	b.container = b.runBuilderContainer(mounts)
 	defer b.container.Remove()
 	b.result = container
@@ -105,7 +112,7 @@ func (b *builder) ProvisionContainer(container *docker.Container, options *Provi
 //	return buildContext.Close()
 //}
 
-func (b *builder) setupProvisionedContainer(playbookPath string) {
+func (b *builder) setupProvisionedContainer(playbookPath string) error {
 	sshKeys := utils.NewSSHKeyGenerator().GenerateInMemory()
 
 	bc := utils.NewInMemoryArchive()
@@ -127,16 +134,38 @@ func (b *builder) setupProvisionedContainer(playbookPath string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	containerAddress := response.NetworkSettings.IPAddress
-	cmd := []string{
-		"/usr/bin/ansible-playbook",
+	//containerAddress := response.NetworkSettings.IPAddress
+	_ = response.NetworkSettings.IPAddress
+
+	//ssh := connector.NewSsh(containerAddress, "root", "/tmp/id_rsa")
+	//ssh.Execute(
+	//	connector.ExecutorFunc(func(command []string) error {
+	//		code, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, command...)
+	//		if err != nil {
+	//			log.Fatal(err)
+	//		}
+	//		return fmt.Errorf("Command failed eith %d", code)
+	//	}),
+	//	playbookPath,
+	//)
+
+	docker := connector.NewDocker(b.result.Id, "root")
+	docker.Execute(
+		connector.ExecutorFunc(func(command []string) error {
+			code, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, command...)
+			if err != nil {
+				log.Fatal(err)
+			}
+			return fmt.Errorf("Command failed eith %d", code)
+		}),
 		playbookPath,
-		"-i", containerAddress + ",",
-		"-l", containerAddress,
-		"-vv",
-		"--ssh-extra-args", "-o StrictHostKeyChecking=no -o IdentityFile=/tmp/id_rsa",
+	)
+
+	//resultCode, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, cmd...)
+	if err != nil {
+		log.Fatal(err)
 	}
-	b.container.ExecAndOutput(os.Stdout, os.Stderr, cmd...)
+	return nil
 }
 
 func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
