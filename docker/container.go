@@ -112,10 +112,14 @@ func (c *Container) Commit(image string, command string) string {
 	return response.ID
 }
 
-func (c *Container) Remove() {
+func (c *Container) StopAndRemove() {
 	if err := c.cli.ContainerStop(c.ctx, c.Id, nil); err != nil {
 		log.Println(err)
 	}
+	c.Remove()
+}
+
+func (c *Container) Remove() {
 	if err := c.cli.ContainerRemove(c.ctx, c.Id, types.ContainerRemoveOptions{RemoveVolumes: true}); err != nil {
 		log.Fatal(err)
 	}

@@ -1,7 +1,7 @@
 package connector
 
 import (
-	"fmt"
+	"strings"
 )
 
 type sshConnector struct {
@@ -15,13 +15,17 @@ func NewSsh(host string, user string, keyPath string) Connector {
 }
 
 func (c *sshConnector) Execute(executor Executor, playbook string) error {
+	sshExtraArgs := []string{
+		"-o StrictHostKeyChecking=no",
+		"-o IdentityFile=" + c.keyPath,
+	}
 	command := []string{
 		"/usr/bin/ansible-playbook",
 		playbook,
 		"-i", c.host + ",",
 		"-l", c.host,
 		"-vv",
-		"--ssh-extra-args", fmt.Sprintf("-o StrictHostKeyChecking=no -o IdentityFile=%s", c.keyPath),
+		"--ssh-extra-args", strings.Join(sshExtraArgs, " "),
 	}
 	return executor.Execute(command)
 }

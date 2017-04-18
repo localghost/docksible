@@ -70,13 +70,12 @@ func (b *builder) ProvisionContainer(container *docker.Container, options *Provi
 		mounts,
 		mount.Mount{Type: "bind", Source: options.PlaybookPath, Target: options.PlaybookPath},
 	)
-	// Following mount is only needed for docker provisioning
 	mounts = append(
 		mounts,
 		mount.Mount{Type: "bind", Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
 	)
 	b.container = b.runBuilderContainer(mounts)
-	defer b.container.Remove()
+	defer b.container.StopAndRemove()
 	b.result = container
 	b.setupProvisionedContainer(options.PlaybookPath)
 }
@@ -134,8 +133,8 @@ func (b *builder) setupProvisionedContainer(playbookPath string) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//containerAddress := response.NetworkSettings.IPAddress
-	_ = response.NetworkSettings.IPAddress
+	containerAddress := response.NetworkSettings.IPAddress
+	_ = containerAddress
 
 	//ssh := connector.NewSsh(containerAddress, "root", "/tmp/id_rsa")
 	//ssh.Execute(
@@ -173,7 +172,8 @@ func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
 		Cmd: []string{
 			"bash", "-c", "tail -f /dev/null",
 		},
-		Image: b.image,
+		Image:      b.image,
+		StopSignal: "SIGKILL",
 	}
 	hostConfig := &container.HostConfig{Mounts: mounts}
 	return docker.NewContainer("", config, hostConfig, nil, nil)
