@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -38,6 +39,8 @@ func NewContainer(name string, config *container.Config, hostConfig *container.H
 }
 
 func (c *Container) run(name string, config *container.Config, hostConfig *container.HostConfig, netConfig *network.NetworkingConfig) {
+	c.pullImageIfNotExists(config.Image)
+
 	response, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, "")
 	if err != nil {
 		log.Fatal(err)
@@ -45,6 +48,46 @@ func (c *Container) run(name string, config *container.Config, hostConfig *conta
 	c.Id = response.ID
 
 	err = c.cli.ContainerStart(c.ctx, c.Id, types.ContainerStartOptions{})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (c *Container) pullImageIfNotExists(image string) {
+	if !c.imageExists(image) {
+		response, err := c.cli.ImagePull(c.ctx, image, types.ImagePullOptions{})
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer response.Close()
+		io.Copy(ioutil.Discard, response)
+	}
+}
+
+func (c *Container) imageExists(image string) bool {
+	filter := filters.NewArgs()
+	filter.Add("reference", image)
+
+	results, err := c.cli.ImageList(c.ctx, types.ImageListOptions{Filters: filter})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return len(results) != 0
+}
+
+func (c *Container) Exec(command ...string) {
+	log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
+	response, err := c.cli.ContainerExecCreate(c.ctx, c.Id, types.ExecConfig{
+		AttachStdout: false,
+		Cmd:          command,
+		Detach:       true,
+		AttachStderr: false,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = c.cli.ContainerExecStart(c.ctx, response.ID, types.ExecStartCheck{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -121,6 +164,21 @@ func (c *Container) StopAndRemove() {
 
 func (c *Container) Remove() {
 	if err := c.cli.ContainerRemove(c.ctx, c.Id, types.ContainerRemoveOptions{RemoveVolumes: true}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (c *Container) Inspect() types.ContainerJSON {
+	result, err := c.cli.ContainerInspect(c.ctx, c.Id)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return result
+}
+
+func (c *Container) CopyTo(dest string, content io.Reader) {
+	err := c.cli.CopyToContainer(c.ctx, c.Id, dest, content, types.CopyToContainerOptions{})
+	if err != nil {
 		log.Fatal(err)
 	}
 }

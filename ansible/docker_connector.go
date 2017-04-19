@@ -1,5 +1,7 @@
 package ansible
 
+import "github.com/localghost/docksible/docker"
+
 type dockerConnector struct {
 	container string
 	user      string
@@ -20,4 +22,25 @@ func (c *dockerConnector) Execute(executor Executor, playbook string) error {
 		"-vv",
 	}
 	return executor.Execute(command)
+}
+
+func (c *dockerConnector) Connect(source *docker.Container, target *docker.Container) error {
+	c.container = target.Id
+	return nil
+}
+
+func (c *dockerConnector) Name() string {
+	return "docker"
+}
+
+func (c *dockerConnector) Host() string {
+	return c.container
+}
+
+func (c *dockerConnector) Args() []string {
+	return []string{}
+}
+
+func (c *dockerConnector) Disconnect() error {
+	return nil
 }

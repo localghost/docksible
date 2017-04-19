@@ -2,13 +2,9 @@ package product
 
 import (
 	"context"
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/docker"
-	"io"
-	"io/ioutil"
 	"log"
 )
 
@@ -29,33 +25,14 @@ func New(baseImage string) *product {
 }
 
 func (p *product) Run() *docker.Container {
-	p.buildProductImage()
 	return p.runProductContainer()
-}
-
-func (p *product) buildProductImage() {
-	filter := filters.NewArgs()
-	filter.Add("reference", p.baseImage)
-
-	results, err := p.cli.ImageList(p.ctx, types.ImageListOptions{Filters: filter})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if len(results) == 0 {
-		response, err := p.cli.ImagePull(p.ctx, p.baseImage, types.ImagePullOptions{})
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer response.Close()
-		io.Copy(ioutil.Discard, response)
-	}
 }
 
 func (p *product) runProductContainer() *docker.Container {
 	config := &container.Config{
-		Cmd:   []string{"/usr/sbin/sshd", "-D"},
-		Image: p.baseImage,
+		Cmd:        []string{"tail", "-f", "/dev/null"},
+		Image:      p.baseImage,
+		StopSignal: "SIGKILL",
 	}
 	return docker.NewContainer("", config, nil, nil, nil)
 }

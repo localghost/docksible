@@ -1,26 +1,19 @@
 package builder
 
 import (
-	//"encoding/json"
-	//"io"
-	//"bufio"
-	//"bytes"
 	"context"
-	//"fmt"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/docker"
-	"github.com/localghost/docksible/utils"
-	//"io"
 
 	"fmt"
 	"github.com/localghost/docksible/ansible"
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type builder struct {
@@ -47,10 +40,6 @@ func New(image string) *builder {
 	return &builder{image: image, cli: cli, ctx: context.Background()}
 }
 
-//func (b *builder) Bootstrap() {
-//	b.buildBuilderImage()
-//}
-
 func (b *builder) ProvisionContainer(container *docker.Container, options *ProvisionOptions) {
 	mounts := []mount.Mount{}
 	if options.AnsibleDir != "" {
@@ -66,10 +55,12 @@ func (b *builder) ProvisionContainer(container *docker.Container, options *Provi
 		}
 		options.PlaybookPath = filepath.Join(cwd, options.PlaybookPath)
 	}
-	mounts = append(
-		mounts,
-		mount.Mount{Type: "bind", Source: options.PlaybookPath, Target: options.PlaybookPath},
-	)
+	if options.AnsibleDir == "" || !strings.HasPrefix(options.PlaybookPath, options.AnsibleDir) {
+		mounts = append(
+			mounts,
+			mount.Mount{Type: "bind", Source: options.PlaybookPath, Target: options.PlaybookPath},
+		)
+	}
 	mounts = append(
 		mounts,
 		mount.Mount{Type: "bind", Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
@@ -80,87 +71,23 @@ func (b *builder) ProvisionContainer(container *docker.Container, options *Provi
 	b.setupProvisionedContainer(options.PlaybookPath)
 }
 
-//func (b *builder) buildBuilderImage() {
-//	fmt.Println("Building builder image")
-//	buildContext := b.createBuildContext()
-//	buildOptions := types.ImageBuildOptions{
-//		Tags: []string{"docksible-builder"},
-//	}
-//	response, err := b.cli.ImageBuild(b.ctx, buildContext, buildOptions)
-//	if err != nil {
-//		log.Fatal(err)
-//	}
-//	defer response.Body.Close()
-//
-//	type Line struct{ Stream string }
-//
-//	decoder := json.NewDecoder(response.Body)
-//	for err == nil {
-//		var line Line
-//		if err = decoder.Decode(&line); err != nil {
-//			break
-//		}
-//		fmt.Print(line.Stream)
-//	}
-//	io.Copy(os.Stdout, response.Body)
-//}
-
-//func (b *builder) createBuildContext() *bytes.Buffer {
-//	buildContext := utils.NewInMemoryArchive()
-//	buildContext.Add("Dockerfile", dockerfile)
-//	return buildContext.Close()
-//}
-
 func (b *builder) setupProvisionedContainer(playbookPath string) error {
-	sshKeys := utils.NewSSHKeyGenerator().GenerateInMemory()
-
-	bc := utils.NewInMemoryArchive()
-	bc.AddBytes("id_rsa", sshKeys.PrivateKey.Bytes())
-	privateKey := bc.Close()
-	b.cli.CopyToContainer(b.ctx, b.container.Id, "/tmp", privateKey, types.CopyToContainerOptions{})
-
-	bc = utils.NewInMemoryArchive()
-	bc.AddBytes("id_rsa.pub", sshKeys.PublicKey.Bytes())
-	publicKey := bc.Close()
-	err := b.cli.CopyToContainer(b.ctx, b.result.Id, "/tmp", publicKey, types.CopyToContainerOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
-	b.result.ExecAndWait("mkdir", "-p", "/root/.ssh")
-	b.result.ExecAndWait("bash", "-c", "cat /tmp/id_rsa.pub >> /root/.ssh/authorized_keys")
-
-	response, err := b.cli.ContainerInspect(b.ctx, b.result.Id)
-	if err != nil {
-		log.Fatal(err)
-	}
-	containerAddress := response.NetworkSettings.IPAddress
-	_ = containerAddress
-
-	//ssh := connector.NewSsh(containerAddress, "root", "/tmp/id_rsa")
-	//ssh.Execute(
-	//	connector.ExecutorFunc(func(command []string) error {
-	//		code, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, command...)
-	//		if err != nil {
-	//			log.Fatal(err)
-	//		}
-	//		return fmt.Errorf("Command failed eith %d", code)
-	//	}),
-	//	playbookPath,
-	//)
-
-	docker := ansible.NewDockerConnector(b.result.Id, "root")
-	docker.Execute(
+	ans := ansible.New(
+		b.container,
 		ansible.ExecutorFunc(func(command []string) error {
 			code, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, command...)
 			if err != nil {
 				log.Fatal(err)
 			}
-			return fmt.Errorf("Command failed eith %d", code)
+			if code != 0 {
+				return fmt.Errorf("Command failed with %d", code)
+			}
+			return nil
 		}),
-		playbookPath,
+		"",
 	)
-
-	//resultCode, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, cmd...)
+	err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewDockerConnector("", "root")})
+	//err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewSshConnector("", "root", "")})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -169,9 +96,7 @@ func (b *builder) setupProvisionedContainer(playbookPath string) error {
 
 func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
 	config := &container.Config{
-		Cmd: []string{
-			"bash", "-c", "tail -f /dev/null",
-		},
+		Cmd:        []string{"tail", "-f", "/dev/null"},
 		Image:      b.image,
 		StopSignal: "SIGKILL",
 	}

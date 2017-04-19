@@ -1,7 +1,13 @@
 package ansible
 
+import "github.com/localghost/docksible/docker"
+
 type Connector interface {
-	//Connect(source *docker.Container, target *docker.Container) string, error // returned string is target host name
 	Execute(executor Executor, playbook string) error
-	//Disconnect() error
+
+	Connect(source *docker.Container, target *docker.Container) error
+	Name() string
+	Host() string
+	Args() []string
+	Disconnect() error
 }

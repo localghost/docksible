@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/localghost/docksible/builder"
 	"github.com/localghost/docksible/product"
+	"github.com/localghost/docksible/utils"
 	"github.com/spf13/cobra"
 	"reflect"
 	"strings"
@@ -31,15 +32,6 @@ func getChoices(flags *rootFlags, fieldName string) []string {
 	return strings.Split(choices, ",")
 }
 
-func inSlice(needle string, haystack []string) bool {
-	for _, e := range haystack {
-		if e == needle {
-			return true
-		}
-	}
-	return false
-}
-
 func CreateRootCommand() *cobra.Command {
 	flags := rootFlags{}
 
@@ -51,7 +43,7 @@ func CreateRootCommand() *cobra.Command {
 			if len(args) != 2 {
 				return fmt.Errorf("Please provide path to playbook to execute and image to provision.")
 			}
-			if !inSlice(flags.ansibleConnector, ansibleConnectorChoices) {
+			if !utils.InStringSlice(flags.ansibleConnector, ansibleConnectorChoices) {
 				return fmt.Errorf("%s is not a supported ansible connector", flags.ansibleConnector)
 			}
 			return nil
@@ -63,7 +55,10 @@ func CreateRootCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&flags.ansibleDir, "ansible-dir", "a", "", "Path to ansible directory.")
 	cmd.Flags().StringSliceVarP(&flags.inventoryGroups, "inventory-groups", "g", []string{}, "Ansible groups the provisioned container should belong to.")
 	cmd.Flags().StringSliceVarP(&flags.extraArgs, "extra-args", "x", []string{}, "Extra arguments passed to ansible.")
-	cmd.Flags().StringVarP(&flags.builderImage, "builder-image", "b", "docksible/builder", "Docker image for the builder container. It needs to have ansible and ssh client built in.")
+	cmd.Flags().StringVarP(
+		&flags.builderImage, "builder-image", "b", "docksible/builder:latest",
+		"Docker image for the builder container. See documentation for its requirements.",
+	)
 	cmd.Flags().StringVarP(&flags.resultImage, "result-image", "r", "", "Name of the resulting docker image.")
 	cmd.Flags().StringVarP(
 		&flags.ansibleConnector, "ansible-connector", "c", ansibleConnectorChoices[0],
