@@ -1,4 +1,4 @@
-package connector
+package ansible
 
 type Executor interface {
 	Execute(command []string) error

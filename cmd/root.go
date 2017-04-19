@@ -5,24 +5,54 @@ import (
 	"github.com/localghost/docksible/builder"
 	"github.com/localghost/docksible/product"
 	"github.com/spf13/cobra"
+	"reflect"
+	"strings"
 )
 
 type rootFlags struct {
-	ansibleDir      string
-	playbookPath    string
-	inventoryGroups []string
-	extraArgs       []string
-	builderImage    string
-	resultImage     string
+	ansibleDir       string
+	playbookPath     string
+	inventoryGroups  []string
+	extraArgs        []string
+	builderImage     string
+	resultImage      string
+	ansibleConnector string `choices:"docker-exec,ssh"`
+}
+
+func getChoices(flags *rootFlags, fieldName string) []string {
+	field, ok := reflect.TypeOf(*flags).FieldByName(fieldName)
+	if !ok {
+		panic(fmt.Sprintf("Field %s not found", fieldName))
+	}
+	choices := field.Tag.Get(`choices`)
+	if choices == "" {
+		return []string{}
+	}
+	return strings.Split(choices, ",")
+}
+
+func inSlice(needle string, haystack []string) bool {
+	for _, e := range haystack {
+		if e == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func CreateRootCommand() *cobra.Command {
 	flags := rootFlags{}
+
+	ansibleConnectorChoices := getChoices(&flags, `ansibleConnector`)
+
 	cmd := &cobra.Command{
 		Use: "docksible [flags] image playbook",
 		PreRunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("Please provide path to playbook to execute and image to provision.")
+			}
+			if !inSlice(flags.ansibleConnector, ansibleConnectorChoices) {
+				return fmt.Errorf("%s is not a supported ansible connector", flags.ansibleConnector)
 			}
 			return nil
 		},
@@ -35,6 +65,10 @@ func CreateRootCommand() *cobra.Command {
 	cmd.Flags().StringSliceVarP(&flags.extraArgs, "extra-args", "x", []string{}, "Extra arguments passed to ansible.")
 	cmd.Flags().StringVarP(&flags.builderImage, "builder-image", "b", "docksible/builder", "Docker image for the builder container. It needs to have ansible and ssh client built in.")
 	cmd.Flags().StringVarP(&flags.resultImage, "result-image", "r", "", "Name of the resulting docker image.")
+	cmd.Flags().StringVarP(
+		&flags.ansibleConnector, "ansible-connector", "c", ansibleConnectorChoices[0],
+		fmt.Sprintf("Ansible connector type to use (choices: %s)", strings.Join(ansibleConnectorChoices, ", ")),
+	)
 
 	return cmd
 }

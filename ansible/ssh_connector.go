@@ -1,4 +1,4 @@
-package connector
+package ansible
 
 import (
 	"strings"
@@ -10,7 +10,7 @@ type sshConnector struct {
 	keyPath string
 }
 
-func NewSsh(host string, user string, keyPath string) Connector {
+func NewSshConnector(host string, user string, keyPath string) Connector {
 	return &sshConnector{host: host, user: user, keyPath: keyPath}
 }
 

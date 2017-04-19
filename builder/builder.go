@@ -17,7 +17,7 @@ import (
 	//"io"
 
 	"fmt"
-	"github.com/localghost/docksible/connector"
+	"github.com/localghost/docksible/ansible"
 	"log"
 	"os"
 	"path/filepath"
@@ -148,9 +148,9 @@ func (b *builder) setupProvisionedContainer(playbookPath string) error {
 	//	playbookPath,
 	//)
 
-	docker := connector.NewDocker(b.result.Id, "root")
+	docker := ansible.NewDockerConnector(b.result.Id, "root")
 	docker.Execute(
-		connector.ExecutorFunc(func(command []string) error {
+		ansible.ExecutorFunc(func(command []string) error {
 			code, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, command...)
 			if err != nil {
 				log.Fatal(err)
