@@ -86,8 +86,8 @@ func (b *builder) setupProvisionedContainer(playbookPath string) error {
 		}),
 		"",
 	)
-	err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewDockerConnector("", "root")})
-	//err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewSshConnector("", "root", "")})
+	err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewDockerConnector()})
+	//err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewSshConnector()})
 	if err != nil {
 		log.Fatal(err)
 	}

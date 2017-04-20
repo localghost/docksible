@@ -38,7 +38,7 @@ func (a *Ansible) Play(playbook string, target PlayTarget) error {
 		"-l", target.Connector.Host(),
 		"-vv",
 	}
-	command = append(command, target.Connector.Args()...)
+	command = append(command, target.Connector.ExtraArgs()...)
 	return a.executor.Execute(command)
 }
 

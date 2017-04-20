@@ -15,6 +15,8 @@ import (
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/localghost/docksible/utils"
+	"path/filepath"
 )
 
 type Container struct {
@@ -176,9 +178,19 @@ func (c *Container) Inspect() types.ContainerJSON {
 	return result
 }
 
+// Copies content into the container, content has to be an archive.
 func (c *Container) CopyTo(dest string, content io.Reader) {
 	err := c.cli.CopyToContainer(c.ctx, c.Id, dest, content, types.CopyToContainerOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+// Copies content into the container, content is plain data.
+func (c *Container) CopyContentTo(dest string, content io.Reader) {
+	bc := utils.NewInMemoryArchive()
+	bc.AddReader(filepath.Base(filepath.Base(dest)), content)
+	buffer := bc.Close()
+
+	c.CopyTo(filepath.Dir(dest), buffer)
 }
