@@ -21,7 +21,7 @@ func (c *sshConnector) Connect(source *docker.Container, target *docker.Containe
 	c.keyPath = "/tmp/id_rsa"
 	source.CopyContentTo(c.keyPath, sshKeys.PrivateKey)
 
-	target.CopyContentTo("/tmp", sshKeys.PublicKey)
+	target.CopyContentTo("/tmp/id_rsa.pub", sshKeys.PublicKey)
 	target.ExecAndWait("mkdir", "-p", "/root/.ssh")
 	target.ExecAndWait("bash", "-c", "cat /tmp/id_rsa.pub >> /root/.ssh/authorized_keys")
 

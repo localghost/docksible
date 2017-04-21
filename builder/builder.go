@@ -8,8 +8,6 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/docker"
 
-	"fmt"
-	"github.com/localghost/docksible/ansible"
 	"log"
 	"os"
 	"path/filepath"
@@ -19,16 +17,8 @@ import (
 type builder struct {
 	image string
 
-	cli       *client.Client
-	ctx       context.Context
-	container *docker.Container
-	result    *docker.Container
-}
-
-type ProvisionOptions struct {
-	PlaybookPath    string
-	AnsibleDir      string
-	InventoryGroups []string
+	cli *client.Client
+	ctx context.Context
 }
 
 func New(image string) *builder {
@@ -40,58 +30,32 @@ func New(image string) *builder {
 	return &builder{image: image, cli: cli, ctx: context.Background()}
 }
 
-func (b *builder) ProvisionContainer(container *docker.Container, options *ProvisionOptions) {
+func (b *builder) Run(ansibleDir, playbookPath string) *docker.Container {
 	mounts := []mount.Mount{}
-	if options.AnsibleDir != "" {
+	if ansibleDir != "" {
 		mounts = append(
 			mounts,
-			mount.Mount{Type: "bind", Source: options.AnsibleDir, Target: options.AnsibleDir},
+			mount.Mount{Type: "bind", Source: ansibleDir, Target: ansibleDir},
 		)
 	}
-	if !filepath.IsAbs(options.PlaybookPath) {
+	if !filepath.IsAbs(playbookPath) {
 		cwd, err := os.Getwd()
 		if err != nil {
 			log.Fatal(err)
 		}
-		options.PlaybookPath = filepath.Join(cwd, options.PlaybookPath)
+		playbookPath = filepath.Join(cwd, playbookPath)
 	}
-	if options.AnsibleDir == "" || !strings.HasPrefix(options.PlaybookPath, options.AnsibleDir) {
+	if ansibleDir == "" || !strings.HasPrefix(playbookPath, ansibleDir) {
 		mounts = append(
 			mounts,
-			mount.Mount{Type: "bind", Source: options.PlaybookPath, Target: options.PlaybookPath},
+			mount.Mount{Type: "bind", Source: playbookPath, Target: playbookPath},
 		)
 	}
 	mounts = append(
 		mounts,
 		mount.Mount{Type: "bind", Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
 	)
-	b.container = b.runBuilderContainer(mounts)
-	defer b.container.StopAndRemove()
-	b.result = container
-	b.setupProvisionedContainer(options.PlaybookPath)
-}
-
-func (b *builder) setupProvisionedContainer(playbookPath string) error {
-	ans := ansible.New(
-		b.container,
-		ansible.ExecutorFunc(func(command []string) error {
-			code, err := b.container.ExecAndOutput(os.Stdout, os.Stderr, command...)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if code != 0 {
-				return fmt.Errorf("Command failed with %d", code)
-			}
-			return nil
-		}),
-		"",
-	)
-	err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewDockerConnector()})
-	//err := ans.Play(playbookPath, ansible.PlayTarget{Container: b.result, Connector: ansible.NewSshConnector()})
-	if err != nil {
-		log.Fatal(err)
-	}
-	return nil
+	return b.runBuilderContainer(mounts)
 }
 
 func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
@@ -101,5 +65,5 @@ func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
 		StopSignal: "SIGKILL",
 	}
 	hostConfig := &container.HostConfig{Mounts: mounts}
-	return docker.NewContainer("", config, hostConfig, nil, nil)
+	return docker.NewContainer("", config, hostConfig, nil, b.cli)
 }

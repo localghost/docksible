@@ -189,7 +189,7 @@ func (c *Container) CopyTo(dest string, content io.Reader) {
 // Copies content into the container, content is plain data.
 func (c *Container) CopyContentTo(dest string, content io.Reader) {
 	bc := utils.NewInMemoryArchive()
-	bc.AddReader(filepath.Base(filepath.Base(dest)), content)
+	bc.AddReader(filepath.Base(dest), content)
 	buffer := bc.Close()
 
 	c.CopyTo(filepath.Dir(dest), buffer)

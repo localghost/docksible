@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/localghost/docksible/ansible"
 	"github.com/localghost/docksible/builder"
 	"github.com/localghost/docksible/product"
 	"github.com/localghost/docksible/utils"
 	"github.com/spf13/cobra"
+	"log"
+	"path/filepath"
 	"reflect"
 	"strings"
 )
@@ -46,6 +49,10 @@ func CreateRootCommand() *cobra.Command {
 			if !utils.InStringSlice(flags.ansibleConnector, ansibleConnectorChoices) {
 				return fmt.Errorf("%s is not a supported ansible connector", flags.ansibleConnector)
 			}
+			var err error
+			if args[1], err = filepath.Abs(args[1]); err != nil {
+				log.Fatal(err)
+			}
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
@@ -69,17 +76,30 @@ func CreateRootCommand() *cobra.Command {
 }
 
 func run(image, playbook string, flags *rootFlags) {
-	provisionOptions := &builder.ProvisionOptions{
-		AnsibleDir:      flags.ansibleDir,
-		PlaybookPath:    playbook,
-		InventoryGroups: flags.inventoryGroups,
-	}
-	b := builder.New(flags.builderImage)
+	provisioner := builder.New(flags.builderImage).Run(flags.ansibleDir, playbook)
+	defer provisioner.StopAndRemove()
 
 	provisioned := product.New(image).Run()
 	defer provisioned.StopAndRemove()
 
-	b.ProvisionContainer(provisioned, provisionOptions)
+	ans := ansible.New(provisioner, flags.ansibleDir)
+	var err error
+	// TODO Add some factory method
+	if flags.ansibleConnector == "docker-exec" {
+		err = ans.Play(
+			playbook,
+			ansible.PlayTarget{
+				Container: provisioned,
+				Connector: ansible.NewDockerConnector(),
+				Groups:    flags.inventoryGroups,
+			},
+		)
+	} else if flags.ansibleConnector == "ssh" {
+		err = ans.Play(playbook, ansible.PlayTarget{Container: provisioned, Connector: ansible.NewSshConnector(), Groups: flags.inventoryGroups})
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	imageId := provisioned.Commit(flags.resultImage, "bash")
 	fmt.Printf("Image %s built successfully.\n", imageId)
