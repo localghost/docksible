@@ -2,9 +2,10 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/docker/docker/api/types/container"
 	"github.com/localghost/docksible/ansible"
-	"github.com/localghost/docksible/builder"
-	"github.com/localghost/docksible/product"
+	"github.com/localghost/docksible/docker"
+	"github.com/localghost/docksible/provisioner"
 	"github.com/localghost/docksible/utils"
 	"github.com/spf13/cobra"
 	"log"
@@ -76,31 +77,34 @@ func CreateRootCommand() *cobra.Command {
 }
 
 func run(image, playbook string, flags *rootFlags) {
-	provisioner := builder.New(flags.builderImage).Run(flags.ansibleDir, playbook)
+	provisioner := provisioner.NewProvisioner(flags.builderImage).Run(flags.ansibleDir, playbook)
 	defer provisioner.StopAndRemove()
 
-	provisioned := product.New(image).Run()
+	provisioned := runProvisioned(image)
 	defer provisioned.StopAndRemove()
 
 	ans := ansible.New(provisioner, flags.ansibleDir)
-	var err error
-	// TODO Add some factory method
-	if flags.ansibleConnector == "docker-exec" {
-		err = ans.Play(
-			playbook,
-			ansible.PlayTarget{
-				Container: provisioned,
-				Connector: ansible.NewDockerConnector(),
-				Groups:    flags.inventoryGroups,
-			},
-		)
-	} else if flags.ansibleConnector == "ssh" {
-		err = ans.Play(playbook, ansible.PlayTarget{Container: provisioned, Connector: ansible.NewSshConnector(), Groups: flags.inventoryGroups})
-	}
+	err := ans.Play(
+		playbook,
+		ansible.PlayTarget{
+			Container: provisioned,
+			Connector: ansible.CreateConnector(flags.ansibleConnector),
+			Groups:    flags.inventoryGroups,
+		},
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	imageId := provisioned.Commit(flags.resultImage, "bash")
 	fmt.Printf("Image %s built successfully.\n", imageId)
+}
+
+func runProvisioned(image string) *docker.Container {
+	config := &container.Config{
+		Cmd:        []string{"tail", "-f", "/dev/null"},
+		Image:      image,
+		StopSignal: "SIGKILL",
+	}
+	return docker.NewContainer("", config, nil, nil, nil)
 }

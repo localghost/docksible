@@ -1,4 +1,4 @@
-package builder
+package provisioner
 
 import (
 	"context"
@@ -9,41 +9,32 @@ import (
 	"github.com/localghost/docksible/docker"
 
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 )
 
-type builder struct {
+type Provisioner struct {
 	image string
 
 	cli *client.Client
 	ctx context.Context
 }
 
-func New(image string) *builder {
+func NewProvisioner(image string) *Provisioner {
 	cli, err := client.NewEnvClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	return &builder{image: image, cli: cli, ctx: context.Background()}
+	return &Provisioner{image: image, cli: cli, ctx: context.Background()}
 }
 
-func (b *builder) Run(ansibleDir, playbookPath string) *docker.Container {
+func (b *Provisioner) Run(ansibleDir, playbookPath string) *docker.Container {
 	mounts := []mount.Mount{}
 	if ansibleDir != "" {
 		mounts = append(
 			mounts,
 			mount.Mount{Type: "bind", Source: ansibleDir, Target: ansibleDir},
 		)
-	}
-	if !filepath.IsAbs(playbookPath) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
-		}
-		playbookPath = filepath.Join(cwd, playbookPath)
 	}
 	if ansibleDir == "" || !strings.HasPrefix(playbookPath, ansibleDir) {
 		mounts = append(
@@ -55,10 +46,7 @@ func (b *builder) Run(ansibleDir, playbookPath string) *docker.Container {
 		mounts,
 		mount.Mount{Type: "bind", Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
 	)
-	return b.runBuilderContainer(mounts)
-}
 
-func (b *builder) runBuilderContainer(mounts []mount.Mount) *docker.Container {
 	config := &container.Config{
 		Cmd:        []string{"tail", "-f", "/dev/null"},
 		Image:      b.image,
