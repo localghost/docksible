@@ -8,7 +8,9 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/docker"
 
+	"github.com/localghost/docksible/utils"
 	"log"
+	"net/url"
 	"strings"
 )
 
@@ -19,17 +21,13 @@ type Provisioner struct {
 	ctx context.Context
 }
 
-func NewProvisioner(image string) *Provisioner {
-	cli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func NewProvisioner(image string, cli *client.Client) *Provisioner {
 	return &Provisioner{image: image, cli: cli, ctx: context.Background()}
 }
 
 func (b *Provisioner) Run(ansibleDir, playbookPath string) *docker.Container {
 	mounts := []mount.Mount{}
+
 	if ansibleDir != "" {
 		mounts = append(
 			mounts,
@@ -42,10 +40,18 @@ func (b *Provisioner) Run(ansibleDir, playbookPath string) *docker.Container {
 			mount.Mount{Type: "bind", Source: playbookPath, Target: playbookPath},
 		)
 	}
-	mounts = append(
-		mounts,
-		mount.Mount{Type: "bind", Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
-	)
+
+	// TODO: do it only in case DOCKER_HOST is not set
+	dockerAddress, err := url.Parse(client.DefaultDockerHost)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if utils.Exists(dockerAddress.Path) {
+		mounts = append(
+			mounts,
+			mount.Mount{Type: "bind", Source: dockerAddress.Path, Target: dockerAddress.Path},
+		)
+	}
 
 	config := &container.Config{
 		Cmd:        []string{"tail", "-f", "/dev/null"},

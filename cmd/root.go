@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/ansible"
 	"github.com/localghost/docksible/docker"
 	"github.com/localghost/docksible/provisioner"
@@ -77,14 +78,20 @@ func CreateRootCommand() *cobra.Command {
 }
 
 func run(image, playbook string, flags *rootFlags) {
-	provisioner := provisioner.NewProvisioner(flags.builderImage).Run(flags.ansibleDir, playbook)
+	cli, err := client.NewEnvClient()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cli.Close()
+
+	provisioner := provisioner.NewProvisioner(flags.builderImage, cli).Run(flags.ansibleDir, playbook)
 	defer provisioner.StopAndRemove()
 
-	provisioned := runProvisioned(image)
+	provisioned := runProvisioned(image, cli)
 	defer provisioned.StopAndRemove()
 
 	ans := ansible.New(provisioner, flags.ansibleDir)
-	err := ans.Play(
+	err = ans.Play(
 		playbook,
 		ansible.PlayTarget{
 			Container: provisioned,
@@ -100,11 +107,11 @@ func run(image, playbook string, flags *rootFlags) {
 	fmt.Printf("Image %s built successfully.\n", imageId)
 }
 
-func runProvisioned(image string) *docker.Container {
+func runProvisioned(image string, cli *client.Client) *docker.Container {
 	config := &container.Config{
 		Cmd:        []string{"tail", "-f", "/dev/null"},
 		Image:      image,
 		StopSignal: "SIGKILL",
 	}
-	return docker.NewContainer("", config, nil, nil, nil)
+	return docker.NewContainer("", config, nil, nil, cli)
 }

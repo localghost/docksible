@@ -27,14 +27,6 @@ type Container struct {
 }
 
 func NewContainer(name string, config *container.Config, hostConfig *container.HostConfig, netConfig *network.NetworkingConfig, cli *client.Client) *Container {
-	if cli == nil {
-		var err error
-		cli, err = client.NewEnvClient()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}
-
 	result := &Container{ctx: context.Background(), cli: cli}
 	result.run(name, config, hostConfig, netConfig)
 	return result
