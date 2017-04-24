@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log"
-	"strings"
 
 	"io/ioutil"
 
@@ -26,6 +25,7 @@ type Container struct {
 	cli *client.Client
 }
 
+// TODO: Pass stream for communication with user.
 func NewContainer(name string, config *container.Config, hostConfig *container.HostConfig, netConfig *network.NetworkingConfig, cli *client.Client) *Container {
 	result := &Container{ctx: context.Background(), cli: cli}
 	result.run(name, config, hostConfig, netConfig)
@@ -49,11 +49,13 @@ func (c *Container) run(name string, config *container.Config, hostConfig *conta
 
 func (c *Container) pullImageIfNotExists(image string) {
 	if !c.imageExists(image) {
+		utils.Println("Image %s does not exist locally. Pulling it.", image)
 		response, err := c.cli.ImagePull(c.ctx, image, types.ImagePullOptions{})
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer response.Close()
+		// TODO: Unpack the response and print it.
 		io.Copy(ioutil.Discard, response)
 	}
 }
@@ -71,7 +73,7 @@ func (c *Container) imageExists(image string) bool {
 }
 
 func (c *Container) Exec(command ...string) {
-	log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
+	//log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
 	response, err := c.cli.ContainerExecCreate(c.ctx, c.Id, types.ExecConfig{
 		AttachStdout: false,
 		Cmd:          command,
@@ -88,7 +90,7 @@ func (c *Container) Exec(command ...string) {
 }
 
 func (c *Container) ExecAndWait(command ...string) (int, error) {
-	log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
+	//log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
 	response, err := c.cli.ContainerExecCreate(c.ctx, c.Id, types.ExecConfig{
 		AttachStdout: true,
 		Cmd:          command,
@@ -109,12 +111,12 @@ func (c *Container) ExecAndWait(command ...string) (int, error) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
+	//log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
 	return inspect.ExitCode, nil
 }
 
 func (c *Container) ExecAndOutput(stdout, stderr io.Writer, command ...string) (int, error) {
-	log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
+	//log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
 	response, err := c.cli.ContainerExecCreate(c.ctx, c.Id, types.ExecConfig{
 		AttachStdout: true,
 		Cmd:          command,
@@ -136,7 +138,7 @@ func (c *Container) ExecAndOutput(stdout, stderr io.Writer, command ...string) (
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
+	//log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
 	return inspect.ExitCode, nil
 }
 

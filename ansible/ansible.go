@@ -26,7 +26,7 @@ func New(controller *docker.Container, workDir string) *Ansible {
 	return &Ansible{controller: controller, workDir: workDir}
 }
 
-func (a *Ansible) Play(playbook string, target PlayTarget) error {
+func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) error {
 	target.Connector.Connect(a.controller, target.Container)
 	defer target.Connector.Disconnect()
 
@@ -47,6 +47,7 @@ func (a *Ansible) Play(playbook string, target PlayTarget) error {
 		"-vv",
 	}
 	command = append(command, target.Connector.ExtraArgs()...)
+	command = append(command, extraArgs...)
 	code, err := a.controller.ExecAndOutput(os.Stdout, os.Stderr, command...)
 	if err != nil {
 		log.Fatal(err)
