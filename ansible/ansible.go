@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 type Ansible struct {
@@ -39,15 +40,19 @@ func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) e
 	a.controller.CopyContentTo(inventoryPath, inventory)
 	defer a.controller.ExecAndWait("rm", "-rf", inventoryPath)
 
-	command := []string{
-		"/usr/bin/ansible-playbook",
+	ansibleCommand := []string{
+		"ansible-playbook",
 		playbook,
 		"-c", target.Connector.Name(),
 		"-i", inventoryPath,
 		"-vv",
 	}
-	command = append(command, target.Connector.ExtraArgs()...)
-	command = append(command, extraArgs...)
+	ansibleCommand = append(ansibleCommand, target.Connector.ExtraArgs()...)
+	ansibleCommand = append(ansibleCommand, extraArgs...)
+
+	command := []string{
+		"sh", "-c", fmt.Sprintf("cd %s && %s", a.workDir, strings.Join(ansibleCommand, " ")),
+	}
 	code, err := a.controller.ExecAndOutput(os.Stdout, os.Stderr, command...)
 	if err != nil {
 		log.Fatal(err)
