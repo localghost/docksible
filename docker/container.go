@@ -26,50 +26,68 @@ type Container struct {
 }
 
 // TODO: Pass stream for communication with user.
-func NewContainer(name string, config *container.Config, hostConfig *container.HostConfig, netConfig *network.NetworkingConfig, cli *client.Client) *Container {
+func NewContainer(
+	name string,
+	config *container.Config,
+	hostConfig *container.HostConfig,
+	netConfig *network.NetworkingConfig,
+	cli *client.Client,
+) (*Container, error) {
 	result := &Container{ctx: context.Background(), cli: cli}
-	result.run(name, config, hostConfig, netConfig)
-	return result
+	if err := result.run(name, config, hostConfig, netConfig); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
-func (c *Container) run(name string, config *container.Config, hostConfig *container.HostConfig, netConfig *network.NetworkingConfig) {
-	c.pullImageIfNotExists(config.Image)
+func (c *Container) run(name string, config *container.Config, hostConfig *container.HostConfig, netConfig *network.NetworkingConfig) error {
+	if err := c.pullImageIfNotExists(config.Image); err != nil {
+		return err
+	}
 
 	response, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, "")
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	c.Id = response.ID
 
 	err = c.cli.ContainerStart(c.ctx, c.Id, types.ContainerStartOptions{})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+
+	return nil
 }
 
-func (c *Container) pullImageIfNotExists(image string) {
-	if !c.imageExists(image) {
+func (c *Container) pullImageIfNotExists(image string) error {
+	imageExists, err := c.imageExists(image)
+	if err != nil {
+		return err
+	}
+
+	if !imageExists {
 		utils.Println("Image %s does not exist locally. Pulling it.", image)
 		response, err := c.cli.ImagePull(c.ctx, image, types.ImagePullOptions{})
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		defer response.Close()
-		// TODO: Unpack the response and print it.
+		// TODO: Unpack the response and print it, check error.
 		io.Copy(ioutil.Discard, response)
 	}
+	return nil
 }
 
-func (c *Container) imageExists(image string) bool {
+func (c *Container) imageExists(image string) (bool, error) {
 	filter := filters.NewArgs()
 	filter.Add("reference", image)
 
 	results, err := c.cli.ImageList(c.ctx, types.ImageListOptions{Filters: filter})
 	if err != nil {
-		log.Fatal(err)
+		return false, err
 	}
 
-	return len(results) != 0
+	return len(results) != 0, nil
 }
 
 func (c *Container) Exec(command ...string) {
@@ -142,13 +160,13 @@ func (c *Container) ExecAndOutput(stdout, stderr io.Writer, command ...string) (
 	return inspect.ExitCode, nil
 }
 
-func (c *Container) Commit(image string, command string) string {
+func (c *Container) Commit(image string, command string) (string, error) {
 	changes := []string{fmt.Sprintf("CMD %s", command)}
 	response, err := c.cli.ContainerCommit(c.ctx, c.Id, types.ContainerCommitOptions{Reference: image, Changes: changes})
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	return response.ID
+	return response.ID, nil
 }
 
 func (c *Container) StopAndRemove() {

@@ -58,7 +58,7 @@ func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) e
 		log.Fatal(err)
 	}
 	if code != 0 {
-		return fmt.Errorf("Command failed with %d", code)
+		return fmt.Errorf("Provisioning failed [%d].", code)
 	}
 	return nil
 }
@@ -66,8 +66,9 @@ func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) e
 func (a *Ansible) createInventory(host string, groups []string) *bytes.Buffer {
 	inventory := new(bytes.Buffer)
 
+	inventory.WriteString(fmt.Sprintf("%s ansible_user=root\n", host))
+
 	cfg := ini.Empty()
-	_, _ = cfg.Section("").NewBooleanKey(host) // TODO check error
 	for _, group := range groups {
 		_, _ = cfg.Section(group).NewBooleanKey(host) // TODO check error
 	}

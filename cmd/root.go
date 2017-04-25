@@ -58,11 +58,13 @@ func CreateRootCommand() *cobra.Command {
 			return nil
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			run(args[0], args[1], args[2:], &flags)
+			if err := run(args[0], args[1], args[2:], &flags); err != nil {
+				fmt.Println(err)
+			}
 		},
 	}
 	cmd.Flags().StringVarP(&flags.ansibleDir, "ansible-dir", "a", "", "Path to ansible directory.")
-	cmd.Flags().StringSliceVarP(&flags.inventoryGroups, "inventory-groups", "g", []string{}, "Ansible groups the provisioned container should belong to.")
+	cmd.Flags().StringSliceVarP(&flags.inventoryGroups, "inventory-group", "g", []string{}, "Ansible group the provisioned container should belong to.")
 	cmd.Flags().StringVarP(
 		&flags.builderImage, "builder-image", "b", "docksible/builder:latest",
 		"Docker image for the builder container. See documentation for its requirements.",
@@ -76,38 +78,46 @@ func CreateRootCommand() *cobra.Command {
 	return cmd
 }
 
-func run(image, playbook string, ansibleExtraArgs []string, flags *rootFlags) {
+func run(image, playbook string, ansibleExtraArgs []string, flags *rootFlags) error {
 	cli, err := client.NewEnvClient()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	defer cli.Close()
 
-	provisioner := provisioner.NewProvisioner(flags.builderImage, cli).Run(flags.ansibleDir, playbook)
+	provisioner, err := provisioner.NewProvisioner(flags.builderImage, cli).Run(flags.ansibleDir, playbook)
+	if err != nil {
+		return err
+	}
 	defer provisioner.StopAndRemove()
 
-	provisioned := runProvisioned(image, cli)
+	provisioned, err := runProvisioned(image, cli)
+	if err != nil {
+		return err
+	}
 	defer provisioned.StopAndRemove()
 
 	ans := ansible.New(provisioner, flags.ansibleDir)
-	err = ans.Play(
-		playbook,
-		ansible.PlayTarget{
-			Container: provisioned,
-			Connector: ansible.CreateConnector(flags.ansibleConnector),
-			Groups:    flags.inventoryGroups,
-		},
-		ansibleExtraArgs,
-	)
+	target := ansible.PlayTarget{
+		Container: provisioned,
+		Connector: ansible.CreateConnector(flags.ansibleConnector),
+		Groups:    flags.inventoryGroups,
+	}
+	err = ans.Play(playbook, target, ansibleExtraArgs)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
-	imageId := provisioned.Commit(flags.resultImage, "bash")
+	imageId, err := provisioned.Commit(flags.resultImage, "bash")
+	if err != nil {
+		return err
+	}
 	fmt.Printf("Image %s(%s) built successfully.\n", flags.resultImage, imageId)
+
+	return nil
 }
 
-func runProvisioned(image string, cli *client.Client) *docker.Container {
+func runProvisioned(image string, cli *client.Client) (*docker.Container, error) {
 	config := &container.Config{
 		Cmd:        []string{"tail", "-f", "/dev/null"},
 		Image:      image,

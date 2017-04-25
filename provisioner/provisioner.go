@@ -25,7 +25,7 @@ func NewProvisioner(image string, cli *client.Client) *Provisioner {
 	return &Provisioner{image: image, cli: cli, ctx: context.Background()}
 }
 
-func (b *Provisioner) Run(ansibleDir, playbookPath string) *docker.Container {
+func (b *Provisioner) Run(ansibleDir, playbookPath string) (*docker.Container, error) {
 	mounts := []mount.Mount{}
 
 	if ansibleDir != "" {
