@@ -6,13 +6,14 @@ go:
 
 before_deploy:
 - go build
-- cat docksible | gzip > docksible-$TRAVIS_TAG.gz
+- export DOCKSIBLE_VERSION=`echo $TRAVIS_TAG | cut -d v -f 2`
+- cat docksible | gzip > docksible-$DOCKSIBLE_VERSION.gz
 
 deploy:
   provider: releases
   api_key:
     secure: tFsxfpOQcFkoPpzjsm9lVnfsExzzPfmLiq7JRiwgpBbJrNmD4rQAN7F8DlhDBkss5wkMihLoGWaKOqze5jJjv1evLDP2TW+yOwlFIo2UYWACmnc+D406XLmtLpHiQmnoj90CkvSCh/B7r/2J85cZkeNhvUclFII+HhbFQnftFBWaVfKl3hlPh8sp7WjnvBX0soGvEpCCZwMC9IKWJ2+ijHzUc/0zvxgkOhLnm+WL/kzF70qBuDGq3C1aJHIBBrSvxbM/qB64VkXaoBzF5Tea8IEbnh4SaaNEEi0MBE5G8Rvuo7d857iVUxlnYzwPn+E1or/U95qXLrGLiMqw9csXvzhIgEFlw1TYCVmByLPSIcogZ2nnmBRvNFvOgI6M9vfQb+zKe1AExQl7KmXdM1bFdGMZKIg1nlGc4LYKW69XLcP2OT+s3f30Ip7a20zW4Xl9nEu0tttw3tIFEJr2KMIuLWZYLeINhaFAc4Sxe3UXs2LRKpGb9W/miV1dWyU8F9h9e+XxyttVv7DtnZwgjNovHaHlqW99y/teGmGbGgmcdYkY/NJNxdwsFcM7Nk+5iA6RMd25gpyso8mQU0onTfF8mSZn8Nlam0AktObxhwqTdLsrb6/VtUsSr8WRn5ak7xf7fGOCK46sqB8uMRe1j8Cdkjtt7Ysgb5Iuwvf8BZ3UuZc=
-  file: docksible-$TRAVIS_TAG.gz
+  file: docksible-$DOCKSIBLE_VERSION.gz
   skip_cleanup: true
   on:
     repo: localghost/docksible
