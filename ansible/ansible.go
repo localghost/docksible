@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/go-ini/ini"
 	"github.com/localghost/docksible/docker"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,7 +54,7 @@ func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) e
 	}
 	code, err := a.controller.ExecAndOutput(os.Stdout, os.Stderr, command...)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if code != 0 {
 		return fmt.Errorf("Provisioning failed [%d].", code)

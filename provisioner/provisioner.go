@@ -9,7 +9,6 @@ import (
 	"github.com/localghost/docksible/docker"
 
 	"github.com/localghost/docksible/utils"
-	"log"
 	"net/url"
 	"strings"
 )
@@ -29,28 +28,19 @@ func (b *Provisioner) Run(ansibleDir, playbookPath string) (*docker.Container, e
 	mounts := []mount.Mount{}
 
 	if ansibleDir != "" {
-		mounts = append(
-			mounts,
-			mount.Mount{Type: "bind", Source: ansibleDir, Target: ansibleDir},
-		)
+		mounts = append(mounts, b.createMirrorBind(ansibleDir))
 	}
 	if ansibleDir == "" || !strings.HasPrefix(playbookPath, ansibleDir) {
-		mounts = append(
-			mounts,
-			mount.Mount{Type: "bind", Source: playbookPath, Target: playbookPath},
-		)
+		mounts = append(mounts, b.createMirrorBind(playbookPath))
 	}
 
-	// TODO: do it only in case DOCKER_HOST is not set
+	// TODO: do it only in case DOCKER_HOST is not set (forward docker-related env vars via container.Config.Env).
 	dockerAddress, err := url.Parse(client.DefaultDockerHost)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	if utils.Exists(dockerAddress.Path) {
-		mounts = append(
-			mounts,
-			mount.Mount{Type: "bind", Source: dockerAddress.Path, Target: dockerAddress.Path},
-		)
+		mounts = append(mounts, b.createMirrorBind(dockerAddress.Path))
 	}
 
 	config := &container.Config{
@@ -60,4 +50,8 @@ func (b *Provisioner) Run(ansibleDir, playbookPath string) (*docker.Container, e
 	}
 	hostConfig := &container.HostConfig{Mounts: mounts}
 	return docker.NewContainer("", config, hostConfig, nil, b.cli)
+}
+
+func (b *Provisioner) createMirrorBind(path string) mount.Mount {
+	return mount.Mount{Type: "bind", Source: path, Target: path}
 }
