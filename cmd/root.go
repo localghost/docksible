@@ -10,6 +10,7 @@ import (
 	"github.com/localghost/docksible/utils"
 	"github.com/spf13/cobra"
 	"log"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -35,6 +36,14 @@ func getChoices(flags *rootFlags, fieldName string) []string {
 		return []string{}
 	}
 	return strings.Split(choices, ",")
+}
+
+func getDefaultAnsibleDir() string {
+	defaultAnsibleDir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return defaultAnsibleDir
 }
 
 func CreateRootCommand() *cobra.Command {
@@ -63,7 +72,8 @@ func CreateRootCommand() *cobra.Command {
 			}
 		},
 	}
-	cmd.Flags().StringVarP(&flags.ansibleDir, "ansible-dir", "a", "", "Path to ansible directory.")
+
+	cmd.Flags().StringVarP(&flags.ansibleDir, "ansible-dir", "a", getDefaultAnsibleDir(), "Path to ansible directory.")
 	cmd.Flags().StringSliceVarP(&flags.inventoryGroups, "inventory-group", "g", []string{}, "Ansible group the provisioned container should belong to.")
 	cmd.Flags().StringVarP(
 		&flags.builderImage, "builder-image", "b", "docksible/builder:latest",
