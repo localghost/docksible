@@ -2,7 +2,7 @@
 
 Build [docker](http://www.docker.com) images with [ansible](http://www.ansible.com).
 
-:cactus: First release available for downloading in [releases](https://github.com/localghost/docksible/releases).
+:cactus: First release available for downloading in [releases](https://github.com/localghost/docksible/releases/tag/v0.1.0).
 
 ## What is docksible?
 
