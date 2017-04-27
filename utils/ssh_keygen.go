@@ -22,20 +22,13 @@ func NewSSHKeyGenerator() *SSHKeyGenerator {
 	return &SSHKeyGenerator{}
 }
 
-func NewInMemorySSHKeys() *InMemorySSHKeys {
-	return &InMemorySSHKeys{
-		PrivateKey: new(bytes.Buffer),
-		PublicKey:  new(bytes.Buffer),
-	}
-}
-
 func (s *SSHKeyGenerator) GenerateInMemory() *InMemorySSHKeys {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	sshKeys := NewInMemorySSHKeys()
+	sshKeys := newInMemorySSHKeys()
 	privateKeyPEM := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}
 	if err := pem.Encode(sshKeys.PrivateKey, privateKeyPEM); err != nil {
 		log.Fatal(err)
@@ -48,6 +41,13 @@ func (s *SSHKeyGenerator) GenerateInMemory() *InMemorySSHKeys {
 	sshKeys.PublicKey.Write(ssh.MarshalAuthorizedKey(pub))
 
 	return sshKeys
+}
+
+func newInMemorySSHKeys() *InMemorySSHKeys {
+	return &InMemorySSHKeys{
+		PrivateKey: new(bytes.Buffer),
+		PublicKey:  new(bytes.Buffer),
+	}
 }
 
 // // MakeSSHKeyPair make a pair of public and private keys for SSH access.

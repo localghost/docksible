@@ -6,7 +6,7 @@ Build [docker](http://www.docker.com) images with [ansible](http://www.ansible.c
 
 ## What is docksible?
 
-Docksible is a utility tool that helps you build docker images provisioned with ansible's playbooks.
+`docksible` is a utility tool that helps you build docker images provisioned with ansible's playbooks.
 
 ## Why docksible?
 
