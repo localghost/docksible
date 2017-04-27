@@ -6,7 +6,7 @@ go:
 
 before_deploy:
 - go build
-- export DOCKSIBLE_VERSION=`echo $TRAVIS_TAG | cut -d v -f 2`
+- export DOCKSIBLE_VERSION=`cat VERSION`
 - cat docksible | gzip > docksible-$DOCKSIBLE_VERSION.gz
 
 deploy:
