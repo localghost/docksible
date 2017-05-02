@@ -3,11 +3,12 @@ package ansible
 import (
 	"bytes"
 	"fmt"
-	"github.com/go-ini/ini"
-	"github.com/localghost/docksible/docker"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/go-ini/ini"
+	"github.com/localghost/docksible/docker"
 )
 
 type Ansible struct {
@@ -44,7 +45,6 @@ func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) e
 		playbook,
 		"-c", target.Connector.Name(),
 		"-i", inventoryPath,
-		"-vv",
 	}
 	ansibleCommand = append(ansibleCommand, target.Connector.ExtraArgs()...)
 	ansibleCommand = append(ansibleCommand, extraArgs...)
