@@ -45,7 +45,7 @@ func (c *Container) run(name string, config *container.Config, hostConfig *conta
 		return err
 	}
 
-	response, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, "")
+	response, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, name)
 	if err != nil {
 		return err
 	}
