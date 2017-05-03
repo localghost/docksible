@@ -24,6 +24,7 @@ type rootFlags struct {
 	builderImage     string
 	resultImage      string
 	ansibleConnector string `choices:"docker-exec,ssh"`
+	hostname         string
 }
 
 func getChoices(flags *rootFlags, fieldName string) []string {
@@ -84,6 +85,7 @@ func CreateRootCommand() *cobra.Command {
 		&flags.ansibleConnector, "ansible-connector", "c", ansibleConnectorChoices[0],
 		fmt.Sprintf("Ansible connector type to use (choices: %s)", strings.Join(ansibleConnectorChoices, ", ")),
 	)
+	cmd.Flags().StringVarP(&flags.hostname, "hostname", "n", "", "Name by which provisioned container can be referred in ansible.")
 
 	return cmd
 }
@@ -101,7 +103,7 @@ func run(image, playbook string, ansibleExtraArgs []string, flags *rootFlags) er
 	}
 	defer provisioner.StopAndRemove()
 
-	provisioned, err := runProvisioned(image, cli)
+	provisioned, err := runProvisioned(image, flags.hostname, cli)
 	if err != nil {
 		return err
 	}
@@ -127,11 +129,14 @@ func run(image, playbook string, ansibleExtraArgs []string, flags *rootFlags) er
 	return nil
 }
 
-func runProvisioned(image string, cli *client.Client) (*docker.Container, error) {
+func runProvisioned(image, hostname string, cli *client.Client) (*docker.Container, error) {
 	config := &container.Config{
 		Cmd:        []string{"tail", "-f", "/dev/null"},
 		Image:      image,
 		StopSignal: "SIGKILL",
 	}
-	return docker.NewContainer("", config, nil, nil, cli)
+	if hostname != "" {
+		config.Hostname = hostname
+	}
+	return docker.NewContainer(hostname, config, nil, nil, cli)
 }
