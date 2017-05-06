@@ -2,6 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/localghost/docksible/ansible"
@@ -9,11 +15,6 @@ import (
 	"github.com/localghost/docksible/provisioner"
 	"github.com/localghost/docksible/utils"
 	"github.com/spf13/cobra"
-	"log"
-	"os"
-	"path/filepath"
-	"reflect"
-	"strings"
 )
 
 type rootFlags struct {
@@ -24,7 +25,7 @@ type rootFlags struct {
 	builderImage     string
 	resultImage      string
 	ansibleConnector string `choices:"docker-exec,ssh"`
-	hostname         string
+	provisionedName  string
 }
 
 func getChoices(flags *rootFlags, fieldName string) []string {
@@ -74,18 +75,32 @@ func CreateRootCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&flags.ansibleDir, "ansible-dir", "a", getDefaultAnsibleDir(), "Path to ansible directory.")
-	cmd.Flags().StringSliceVarP(&flags.inventoryGroups, "inventory-group", "g", []string{}, "Ansible group the provisioned container should belong to.")
+	cmd.Flags().StringVarP(
+		&flags.ansibleDir, "ansible-dir", "a", getDefaultAnsibleDir(), "Path to ansible directory.",
+	)
+	cmd.Flags().StringSliceVarP(
+		&flags.inventoryGroups, "inventory-group", "g", []string{},
+		"Ansible group the provisioned container should belong to.",
+	)
 	cmd.Flags().StringVarP(
 		&flags.builderImage, "builder-image", "b", "docksible/builder:latest",
 		"Docker image for the builder container. See documentation for its requirements.",
 	)
-	cmd.Flags().StringVarP(&flags.resultImage, "result-image", "r", "", "Name of the resulting docker image.")
+	cmd.Flags().StringVarP(
+		&flags.resultImage, "result-image", "i", "",
+		"Name of the resulting docker image. DEPRECATED, please used --tag/-t instead.",
+	)
+	cmd.Flags().StringVarP(
+		&flags.resultImage, "tag", "t", "", "Name of the resulting docker image.",
+	)
 	cmd.Flags().StringVarP(
 		&flags.ansibleConnector, "ansible-connector", "c", ansibleConnectorChoices[0],
 		fmt.Sprintf("Ansible connector type to use (choices: %s)", strings.Join(ansibleConnectorChoices, ", ")),
 	)
-	cmd.Flags().StringVarP(&flags.hostname, "hostname", "n", "", "Name by which provisioned container can be referred in ansible.")
+	cmd.Flags().StringVarP(
+		&flags.provisionedName, "provisioned-name", "n", "",
+		"Name by which provisioned container can be referred to in ansible.",
+	)
 
 	return cmd
 }
@@ -103,7 +118,7 @@ func run(image, playbook string, ansibleExtraArgs []string, flags *rootFlags) er
 	}
 	defer provisioner.StopAndRemove()
 
-	provisioned, err := runProvisioned(image, flags.hostname, cli)
+	provisioned, err := runProvisioned(image, flags.provisionedName, cli)
 	if err != nil {
 		return err
 	}
@@ -120,23 +135,21 @@ func run(image, playbook string, ansibleExtraArgs []string, flags *rootFlags) er
 		return err
 	}
 
-	imageId, err := provisioned.Commit(flags.resultImage, "bash")
+	imageID, err := provisioned.Commit(flags.resultImage, "bash")
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Image %s(%s) built successfully.\n", flags.resultImage, imageId)
+	fmt.Printf("Image %s(%s) built successfully.\n", flags.resultImage, imageID)
 
 	return nil
 }
 
-func runProvisioned(image, hostname string, cli *client.Client) (*docker.Container, error) {
+func runProvisioned(image, provisionedName string, cli *client.Client) (*docker.Container, error) {
 	config := &container.Config{
 		Cmd:        []string{"tail", "-f", "/dev/null"},
 		Image:      image,
 		StopSignal: "SIGKILL",
+		Hostname:   provisionedName,
 	}
-	if hostname != "" {
-		config.Hostname = hostname
-	}
-	return docker.NewContainer(hostname, config, nil, nil, cli)
+	return docker.NewContainer(provisionedName, config, nil, nil, cli)
 }

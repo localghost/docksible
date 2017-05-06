@@ -38,6 +38,7 @@ func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) e
 		inventoryPath = filepath.Join(a.workDir, "docksible-inventory")
 	}
 	a.controller.CopyContentTo(inventoryPath, inventory)
+	a.controller.ExecAndWait("chmod", "0666", inventoryPath)
 	defer a.controller.ExecAndWait("rm", "-rf", inventoryPath)
 
 	ansibleCommand := []string{
