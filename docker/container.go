@@ -4,18 +4,21 @@ import (
 	"context"
 	"io"
 	"log"
+	"os"
 
 	"io/ioutil"
 
 	"fmt"
+	"path/filepath"
+
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/jsonmessage"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/localghost/docksible/utils"
-	"path/filepath"
 )
 
 type Container struct {
@@ -72,8 +75,8 @@ func (c *Container) pullImageIfNotExists(image string) error {
 			return err
 		}
 		defer response.Close()
-		// TODO: Unpack the response and print it, check error.
-		io.Copy(ioutil.Discard, response)
+		// FIXME: it doesn't always have to be true that output stream is STDOUT and output is terminal.
+		jsonmessage.DisplayJSONMessagesStream(response, os.Stdout, 1, true, nil)
 	}
 	return nil
 }
