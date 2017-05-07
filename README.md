@@ -29,9 +29,10 @@ ansible/
 
 you enter `ansible` directory and you run:
 ```
-docksible --result-image my_image centos:7.3.1611 playbook.yml
+docksible --tag my_image centos:7.3.1611 playbook.yml
 ```
 
 And soon you have image `my_image` based on CentOS 7.3 ready waiting for you in your docker engine.
+See [here](https://github.com/localghost/docksible/wiki/CLI-Reference) for full reference and more examples.
 
 [![Build Status](https://travis-ci.org/localghost/docksible.svg?branch=master)](https://travis-ci.org/localghost/docksible)
