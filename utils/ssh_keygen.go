@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"log"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -22,25 +21,25 @@ func NewSSHKeyGenerator() *SSHKeyGenerator {
 	return &SSHKeyGenerator{}
 }
 
-func (s *SSHKeyGenerator) GenerateInMemory() *InMemorySSHKeys {
+func (s *SSHKeyGenerator) GenerateInMemory() (*InMemorySSHKeys, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 1024)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	sshKeys := newInMemorySSHKeys()
 	privateKeyPEM := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}
 	if err := pem.Encode(sshKeys.PrivateKey, privateKeyPEM); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	pub, err := ssh.NewPublicKey(&privateKey.PublicKey)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 	sshKeys.PublicKey.Write(ssh.MarshalAuthorizedKey(pub))
 
-	return sshKeys
+	return sshKeys, nil
 }
 
 func newInMemorySSHKeys() *InMemorySSHKeys {

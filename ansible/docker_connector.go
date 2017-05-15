@@ -1,8 +1,9 @@
 package ansible
 
 import (
-	"github.com/localghost/docksible/docker"
 	"strings"
+
+	"github.com/localghost/docksible/docker"
 )
 
 type dockerConnector struct {
@@ -18,7 +19,11 @@ func (c *dockerConnector) Connect(source *docker.Container, target *docker.Conta
 	c.containerId = target.Id
 	// Container name starts with slash '/'. Maybe name should be taken directly from --hostname/-n instead of going
 	// through inspect.
-	c.containerName = strings.TrimLeft(target.Inspect().Name, "/")
+	inspect, err := target.Inspect()
+	if err != nil {
+		return err
+	}
+	c.containerName = strings.TrimLeft(inspect.Name, "/")
 	return nil
 }
 

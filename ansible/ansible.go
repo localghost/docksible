@@ -28,17 +28,27 @@ func New(controller *docker.Container, workDir string) *Ansible {
 }
 
 func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) error {
-	target.Connector.Connect(a.controller, target.Container)
+	if err := target.Connector.Connect(a.controller, target.Container); err != nil {
+		return err
+	}
 	defer target.Connector.Disconnect()
 
 	// Host() is valid only after connection between containers have been established.
-	inventory := a.createInventory(target.Connector.Host(), target.Groups)
+	inventory, err := a.createInventory(target.Connector.Host(), target.Groups)
+	if err != nil {
+		return err
+	}
 	inventoryPath := "/tmp/docksible-inventory"
 	if a.workDir != "" {
 		inventoryPath = filepath.Join(a.workDir, "docksible-inventory")
 	}
-	a.controller.CopyContentTo(inventoryPath, inventory)
-	a.controller.ExecAndWait("chmod", "0666", inventoryPath)
+	if err := a.controller.CopyContentTo(inventoryPath, inventory); err != nil {
+		return err
+	}
+	if _, err := a.controller.ExecAndWait("chmod", "0666", inventoryPath); err != nil {
+		return nil
+	}
+	// FIXME: check error in defer (use hashicorp/go-mutlierror?)
 	defer a.controller.ExecAndWait("rm", "-rf", inventoryPath)
 
 	ansibleCommand := []string{
@@ -63,16 +73,22 @@ func (a *Ansible) Play(playbook string, target PlayTarget, extraArgs []string) e
 	return nil
 }
 
-func (a *Ansible) createInventory(host string, groups []string) *bytes.Buffer {
+func (a *Ansible) createInventory(host string, groups []string) (*bytes.Buffer, error) {
 	inventory := new(bytes.Buffer)
 
-	inventory.WriteString(fmt.Sprintf("%s ansible_user=root\n", host))
+	if _, err := inventory.WriteString(fmt.Sprintf("%s ansible_user=root\n", host)); err != nil {
+		return nil, err
+	}
 
 	cfg := ini.Empty()
 	for _, group := range groups {
-		_, _ = cfg.Section(group).NewBooleanKey(host) // TODO check error
+		if _, err := cfg.Section(group).NewBooleanKey(host); err != nil {
+			return nil, err
+		}
 	}
-	cfg.WriteTo(inventory)
+	if _, err := cfg.WriteTo(inventory); err != nil {
+		return nil, err
+	}
 
-	return inventory
+	return inventory, nil
 }

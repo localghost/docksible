@@ -11,8 +11,13 @@ func TestAdd(t *testing.T) {
 	expectedContent := "Hello world!"
 
 	archive := NewInMemoryArchive()
-	archive.Add(expectedFileName, expectedContent)
-	buffer := archive.Close()
+	if archive.Add(expectedFileName, expectedContent) != nil {
+		t.Fatalf("Failed to add file %s to archive", expectedFileName)
+	}
+	buffer, err := archive.Close()
+	if err != nil {
+		t.Fatalf("Failed to create archive")
+	}
 
 	reader := tar.NewReader(buffer)
 	hdr, err := reader.Next()

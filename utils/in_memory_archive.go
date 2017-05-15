@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	"log"
 )
 
 type InMemoryArchive struct {
@@ -21,24 +20,31 @@ func NewInMemoryArchive() *InMemoryArchive {
 	}
 }
 
-func (bc *InMemoryArchive) Add(name, data string) {
-	bc.AddBytes(name, []byte(data))
+func (bc *InMemoryArchive) Add(name, data string) error {
+	return bc.AddBytes(name, []byte(data))
 }
 
-func (bc *InMemoryArchive) AddBytes(name string, data []byte) {
-	bc.writer.WriteHeader(&tar.Header{Name: name, Size: int64(len(data))})
-	bc.writer.Write(data)
+func (bc *InMemoryArchive) AddBytes(name string, data []byte) error {
+	if err := bc.writer.WriteHeader(&tar.Header{Name: name, Size: int64(len(data))}); err != nil {
+		return err
+	}
+	if _, err := bc.writer.Write(data); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (bc *InMemoryArchive) AddReader(name string, data io.Reader) {
+func (bc *InMemoryArchive) AddReader(name string, data io.Reader) error {
 	bytes, err := ioutil.ReadAll(data)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	bc.AddBytes(name, bytes)
+	return bc.AddBytes(name, bytes)
 }
 
-func (bc *InMemoryArchive) Close() *bytes.Buffer {
-	bc.writer.Close()
-	return bc.content
+func (bc *InMemoryArchive) Close() (*bytes.Buffer, error) {
+	if err := bc.writer.Close(); err != nil {
+		return nil, err
+	}
+	return bc.content, nil
 }

@@ -18,33 +18,61 @@ func NewSshConnector() Connector {
 }
 
 func (c *sshConnector) Connect(source, target *docker.Container) error {
-	c.installSSHKeys(source, target)
+	if err := c.installSSHKeys(source, target); err != nil {
+		return err
+	}
 
-	targetInspect := target.Inspect()
-	c.registerHostInContainer(source, targetInspect.NetworkSettings.IPAddress, targetInspect.Config.Hostname)
+	targetInspect, err := target.Inspect()
+	if err != nil {
+		return err
+	}
+	if err := c.registerHostInContainer(source, targetInspect.NetworkSettings.IPAddress, targetInspect.Config.Hostname); err != nil {
+		return err
+	}
 
 	c.host = targetInspect.Config.Hostname
 
 	return nil
 }
 
-func (c *sshConnector) installSSHKeys(source, target *docker.Container) {
-	sshKeys := utils.NewSSHKeyGenerator().GenerateInMemory()
+func (c *sshConnector) installSSHKeys(source, target *docker.Container) error {
+	sshKeys, err := utils.NewSSHKeyGenerator().GenerateInMemory()
+	if err != nil {
+		return err
+	}
 
 	c.keyPath = "/tmp/id_rsa"
-	source.CopyContentTo(c.keyPath, sshKeys.PrivateKey)
-	source.ExecAndWait("chmod", "0400", c.keyPath)
+	if err := source.CopyContentTo(c.keyPath, sshKeys.PrivateKey); err != nil {
+		return err
+	}
+	// FIXME: check exit code
+	if _, err := source.ExecAndWait("chmod", "0400", c.keyPath); err != nil {
+		return err
+	}
 
-	target.CopyContentTo("/tmp/id_rsa.pub", sshKeys.PublicKey)
-	target.ExecAndWait("mkdir", "-p", "/root/.ssh")
-	target.ExecAndWait("bash", "-c", "cat /tmp/id_rsa.pub >> /root/.ssh/authorized_keys")
+	if err := target.CopyContentTo("/tmp/id_rsa.pub", sshKeys.PublicKey); err != nil {
+		return err
+	}
+	if _, err := target.ExecAndWait("mkdir", "-p", "/root/.ssh"); err != nil {
+		return err
+	}
+	if _, err := target.ExecAndWait("bash", "-c", "cat /tmp/id_rsa.pub >> /root/.ssh/authorized_keys"); err != nil {
+		return err
+	}
 
-	target.Exec("/usr/sbin/sshd", "-D")
+	if err := target.Exec("/usr/sbin/sshd", "-D"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (c *sshConnector) registerHostInContainer(source *docker.Container, ipAddress, hostname string) {
+func (c *sshConnector) registerHostInContainer(source *docker.Container, ipAddress, hostname string) error {
 	command := fmt.Sprintf(`echo "%s %s" >> /etc/hosts`, ipAddress, hostname)
-	source.ExecAndWait("bash", "-c", command)
+	if _, err := source.ExecAndWait("bash", "-c", command); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (c *sshConnector) Name() string {

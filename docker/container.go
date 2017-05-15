@@ -3,7 +3,6 @@ package docker
 import (
 	"context"
 	"io"
-	"log"
 	"os"
 
 	"io/ioutil"
@@ -93,7 +92,7 @@ func (c *Container) imageExists(image string) (bool, error) {
 	return len(results) != 0, nil
 }
 
-func (c *Container) Exec(command ...string) {
+func (c *Container) Exec(command ...string) error {
 	//log.Printf("Running in %s: %s\n", c.Id, strings.Join(command, " "))
 	response, err := c.cli.ContainerExecCreate(c.ctx, c.Id, types.ExecConfig{
 		AttachStdout: false,
@@ -102,12 +101,9 @@ func (c *Container) Exec(command ...string) {
 		AttachStderr: false,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-	err = c.cli.ContainerExecStart(c.ctx, response.ID, types.ExecStartCheck{})
-	if err != nil {
-		log.Fatal(err)
-	}
+	return c.cli.ContainerExecStart(c.ctx, response.ID, types.ExecStartCheck{})
 }
 
 func (c *Container) ExecAndWait(command ...string) (int, error) {
@@ -119,18 +115,18 @@ func (c *Container) ExecAndWait(command ...string) (int, error) {
 		AttachStderr: true,
 	})
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	hijacked, err := c.cli.ContainerExecAttach(c.ctx, response.ID, types.ExecConfig{})
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	defer hijacked.Close()
 	io.Copy(ioutil.Discard, hijacked.Reader)
 
 	inspect, err := c.cli.ContainerExecInspect(c.ctx, response.ID)
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	//log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
 	return inspect.ExitCode, nil
@@ -146,18 +142,18 @@ func (c *Container) ExecAndOutput(stdout, stderr io.Writer, command ...string) (
 		Tty:          false, // enable to turn on coloring
 	})
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	hijacked, err := c.cli.ContainerExecAttach(c.ctx, response.ID, types.ExecConfig{})
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	defer hijacked.Close()
 	stdcopy.StdCopy(stdout, stderr, hijacked.Reader)
 
 	inspect, err := c.cli.ContainerExecInspect(c.ctx, response.ID)
 	if err != nil {
-		log.Fatal(err)
+		return 0, err
 	}
 	//log.Printf("Running %v, ExitCode: %d\n", inspect.Running, inspect.ExitCode)
 	return inspect.ExitCode, nil
@@ -172,40 +168,36 @@ func (c *Container) Commit(image string, command string) (string, error) {
 	return response.ID, nil
 }
 
-func (c *Container) StopAndRemove() {
+func (c *Container) StopAndRemove() error {
 	if err := c.cli.ContainerStop(c.ctx, c.Id, nil); err != nil {
-		log.Println(err)
+		return err
 	}
-	c.Remove()
+	return c.Remove()
 }
 
-func (c *Container) Remove() {
-	if err := c.cli.ContainerRemove(c.ctx, c.Id, types.ContainerRemoveOptions{RemoveVolumes: true}); err != nil {
-		log.Fatal(err)
-	}
+func (c *Container) Remove() error {
+	return c.cli.ContainerRemove(c.ctx, c.Id, types.ContainerRemoveOptions{RemoveVolumes: true})
 }
 
-func (c *Container) Inspect() types.ContainerJSON {
-	result, err := c.cli.ContainerInspect(c.ctx, c.Id)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return result
+func (c *Container) Inspect() (types.ContainerJSON, error) {
+	return c.cli.ContainerInspect(c.ctx, c.Id)
 }
 
 // Copies content into the container, content has to be an archive.
-func (c *Container) CopyTo(dest string, content io.Reader) {
-	err := c.cli.CopyToContainer(c.ctx, c.Id, dest, content, types.CopyToContainerOptions{})
-	if err != nil {
-		log.Fatal(err)
-	}
+func (c *Container) CopyTo(dest string, content io.Reader) error {
+	return c.cli.CopyToContainer(c.ctx, c.Id, dest, content, types.CopyToContainerOptions{})
 }
 
 // Copies content into the container, content is plain data.
-func (c *Container) CopyContentTo(dest string, content io.Reader) {
+func (c *Container) CopyContentTo(dest string, content io.Reader) error {
 	bc := utils.NewInMemoryArchive()
-	bc.AddReader(filepath.Base(dest), content)
-	buffer := bc.Close()
+	if err := bc.AddReader(filepath.Base(dest), content); err != nil {
+		return err
+	}
+	buffer, err := bc.Close()
+	if err != nil {
+		return err
+	}
 
-	c.CopyTo(filepath.Dir(dest), buffer)
+	return c.CopyTo(filepath.Dir(dest), buffer)
 }
